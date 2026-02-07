@@ -1,0 +1,1140 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Notification Center</title>
+    <meta name="description" content="Push notification management dashboard">
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <style>
+        :root {
+            --primary: #7c3aed;
+            --primary-dark: #6d28d9;
+            --accent: #06b6d4;
+            --success: #22c55e;
+            --error: #ef4444;
+            --warning: #f59e0b;
+            --bg-dark: #0f172a;
+            --bg-card: rgba(30, 41, 59, 0.8);
+            --border: rgba(148, 163, 184, 0.2);
+            --text: #f1f5f9;
+            --text-muted: #94a3b8;
+            --radius: 12px;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: var(--bg-dark);
+            color: var(--text);
+            min-height: 100vh;
+            line-height: 1.5;
+        }
+
+        .container {
+            max-width: 1100px;
+            margin: 0 auto;
+            padding: 24px;
+        }
+
+        /* Header */
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 32px;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 1.5rem;
+            font-weight: 700;
+        }
+
+        .logo-icon {
+            font-size: 2rem;
+        }
+
+        /* Tabs */
+        .tabs {
+            display: flex;
+            gap: 8px;
+            background: var(--bg-card);
+            padding: 6px;
+            border-radius: 50px;
+            border: 1px solid var(--border);
+        }
+
+        .tab {
+            padding: 10px 24px;
+            border: none;
+            border-radius: 50px;
+            background: transparent;
+            color: var(--text-muted);
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-family: inherit;
+            font-size: 0.9rem;
+        }
+
+        .tab:hover {
+            color: var(--text);
+        }
+
+        .tab.active {
+            background: var(--primary);
+            color: white;
+        }
+
+        /* Sections */
+        .section {
+            display: none;
+        }
+
+        .section.active {
+            display: block;
+            animation: fadeIn 0.3s ease;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        /* Cards */
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 24px;
+            margin-bottom: 24px;
+        }
+
+        .card-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        /* Stats Grid */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        @media (max-width: 768px) {
+            .stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        .stat-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 20px;
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 2rem;
+            font-weight: 700;
+        }
+
+        .stat-label {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        /* Forms */
+        .form-group {
+            margin-bottom: 16px;
+        }
+
+        .form-label {
+            display: block;
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: var(--text-muted);
+            margin-bottom: 8px;
+        }
+
+        .form-input,
+        .form-textarea {
+            width: 100%;
+            padding: 12px 16px;
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--text);
+            font-family: inherit;
+            font-size: 1rem;
+            transition: border-color 0.2s;
+        }
+
+        .form-input:focus,
+        .form-textarea:focus {
+            outline: none;
+            border-color: var(--primary);
+        }
+
+        .form-textarea {
+            min-height: 100px;
+            resize: vertical;
+        }
+
+        /* Buttons */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-family: inherit;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: var(--primary);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: var(--primary-dark);
+            transform: translateY(-1px);
+        }
+
+        .btn-accent {
+            background: var(--accent);
+            color: white;
+        }
+
+        .btn-accent:hover {
+            opacity: 0.9;
+            transform: translateY(-1px);
+        }
+
+        .btn-full {
+            width: 100%;
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none !important;
+        }
+
+        .btn-sm {
+            padding: 8px 16px;
+            font-size: 0.875rem;
+        }
+
+        .btn-danger {
+            background: transparent;
+            border: 1px solid var(--error);
+            color: var(--error);
+            padding: 6px 12px;
+            font-size: 0.8rem;
+        }
+
+        .btn-danger:hover {
+            background: var(--error);
+            color: white;
+        }
+
+        /* Success Message */
+        .success-msg {
+            background: var(--success);
+            color: white;
+            padding: 16px;
+            border-radius: 8px;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            animation: slideIn 0.3s ease;
+        }
+
+        .success-msg.hidden {
+            display: none;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateX(-10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        /* Two Column Layout */
+        .grid-2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 24px;
+        }
+
+        @media (max-width: 900px) {
+            .grid-2 {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* Device List */
+        .device-list {
+            max-height: 350px;
+            overflow-y: auto;
+        }
+
+        .device-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 8px;
+            margin-bottom: 8px;
+            transition: background 0.2s;
+        }
+
+        .device-item:hover {
+            background: rgba(0, 0, 0, 0.3);
+        }
+
+        .device-checkbox {
+            width: 18px;
+            height: 18px;
+            accent-color: var(--primary);
+            cursor: pointer;
+        }
+
+        .device-info {
+            flex: 1;
+        }
+
+        .device-name {
+            font-weight: 600;
+            color: var(--text);
+        }
+
+        .device-email {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 40px;
+            color: var(--text-muted);
+        }
+
+        .empty-state-icon {
+            font-size: 3rem;
+            margin-bottom: 12px;
+            opacity: 0.5;
+        }
+
+        /* Radio Options */
+        .radio-group {
+            display: flex;
+            gap: 24px;
+            margin-bottom: 16px;
+        }
+
+        .radio-option {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+        }
+
+        .radio-option input[type="radio"] {
+            width: 18px;
+            height: 18px;
+            accent-color: var(--primary);
+        }
+
+        /* Device Selection Box */
+        .device-select-box {
+            max-height: 200px;
+            overflow-y: auto;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 16px;
+        }
+
+        .device-select-box.hidden {
+            display: none;
+        }
+
+        .device-select-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .device-select-item:hover {
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        /* History List */
+        .history-list {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .history-item {
+            padding: 16px;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 8px;
+            margin-bottom: 12px;
+            border-left: 3px solid var(--primary);
+        }
+
+        .history-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 8px;
+        }
+
+        .history-title {
+            font-weight: 600;
+        }
+
+        .history-time {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+
+        .history-message {
+            color: var(--text-muted);
+            font-size: 0.9rem;
+            margin-bottom: 12px;
+        }
+
+        .history-meta {
+            display: flex;
+            gap: 16px;
+            flex-wrap: wrap;
+            font-size: 0.8rem;
+        }
+
+        .meta-success {
+            color: var(--success);
+        }
+
+        .meta-failed {
+            color: var(--error);
+        }
+
+        .meta-mode {
+            color: var(--accent);
+        }
+
+        /* Toast Container */
+        .toast-container {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .toast {
+            padding: 16px 20px;
+            background: #1e293b;
+            border-radius: 8px;
+            border-left: 4px solid;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            animation: toastIn 0.3s ease;
+            min-width: 280px;
+        }
+
+        @keyframes toastIn {
+            from {
+                opacity: 0;
+                transform: translateX(100%);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        .toast-success {
+            border-color: var(--success);
+        }
+
+        .toast-error {
+            border-color: var(--error);
+        }
+
+        .toast-info {
+            border-color: var(--primary);
+        }
+
+        .toast-close {
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            cursor: pointer;
+            margin-left: auto;
+        }
+
+        /* Permission Banner */
+        .permission-banner {
+            background: linear-gradient(135deg, var(--warning), #d97706);
+            padding: 16px 24px;
+            border-radius: var(--radius);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+            gap: 16px;
+        }
+
+        .permission-banner.hidden {
+            display: none;
+        }
+
+        .permission-text {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        /* Spinner */
+        .spinner {
+            width: 18px;
+            height: 18px;
+            border: 2px solid transparent;
+            border-top-color: currentColor;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 10px;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--primary);
+            border-radius: 10px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <div class="logo">
+                <span class="logo-icon">🔔</span>
+                <span>Notification Center</span>
+            </div>
+            <div class="tabs">
+                <button class="tab active" data-section="register">📱 Register</button>
+                <button class="tab" data-section="admin">⚙️ Admin</button>
+            </div>
+        </header>
+
+        <!-- Permission Banner -->
+        <div class="permission-banner" id="permission-banner">
+            <div class="permission-text">
+                <span>🔔</span>
+                <span>Enable desktop notifications for real push alerts</span>
+            </div>
+            <button class="btn btn-sm" id="enable-notif-btn" style="background: white; color: #d97706;">
+                Enable
+            </button>
+        </div>
+
+        <!-- REGISTER SECTION -->
+        <section class="section active" id="section-register">
+            <div class="card" style="max-width: 500px; margin: 0 auto;">
+                <div class="card-title">📱 Register Device</div>
+
+                <div class="success-msg hidden" id="register-success">
+                    ✅ Device registered successfully!
+                </div>
+
+                <form id="register-form">
+                    <div class="form-group">
+                        <label class="form-label">Device Name *</label>
+                        <input type="text" class="form-input" id="device-name" placeholder="e.g., John's iPhone"
+                            required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Email (Optional)</label>
+                        <input type="email" class="form-input" id="device-email" placeholder="john@example.com">
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-full" id="register-btn">
+                        Register Device
+                    </button>
+                </form>
+            </div>
+        </section>
+
+        <!-- ADMIN SECTION -->
+        <section class="section" id="section-admin">
+            <!-- Stats -->
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-value" id="stat-devices">0</div>
+                    <div class="stat-label">Devices</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="stat-notifications">0</div>
+                    <div class="stat-label">Notifications</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="stat-success">0</div>
+                    <div class="stat-label">Successful</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="stat-failed">0</div>
+                    <div class="stat-label">Failed</div>
+                </div>
+            </div>
+
+            <div class="grid-2">
+                <!-- Left Column -->
+                <div>
+                    <!-- Registered Devices -->
+                    <div class="card">
+                        <div class="card-title">📋 Registered Devices</div>
+                        <div class="device-list" id="device-list">
+                            <div class="empty-state">
+                                <div class="empty-state-icon">📱</div>
+                                <p>No devices registered</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Send Notification -->
+                    <div class="card">
+                        <div class="card-title">📤 Send Notification</div>
+                        <form id="notification-form">
+                            <div class="form-group">
+                                <label class="form-label">Title *</label>
+                                <input type="text" class="form-input" id="notif-title" placeholder="Notification title"
+                                    required>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Message *</label>
+                                <textarea class="form-textarea" id="notif-message" placeholder="Your message..."
+                                    required></textarea>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Target Devices</label>
+                                <div class="radio-group">
+                                    <label class="radio-option">
+                                        <input type="radio" name="target" value="all" checked>
+                                        <span>Send to All</span>
+                                    </label>
+                                    <label class="radio-option">
+                                        <input type="radio" name="target" value="specific">
+                                        <span>Select Specific</span>
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="device-select-box hidden" id="device-select-box">
+                                <!-- Populated by JS -->
+                            </div>
+                            <button type="submit" class="btn btn-accent btn-full" id="send-btn">
+                                Send Notification
+                            </button>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- Right Column -->
+                <div>
+                    <!-- Notification History -->
+                    <div class="card">
+                        <div class="card-title">📜 Notification History</div>
+                        <div class="history-list" id="history-list">
+                            <div class="empty-state">
+                                <div class="empty-state-icon">📭</div>
+                                <p>No notifications sent yet</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <!-- Toast Container -->
+    <div class="toast-container" id="toast-container"></div>
+
+    <script>
+        // ============================================
+        // SERVICE WORKER REGISTRATION
+        // ============================================
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/service-worker.js')
+                .then(reg => console.log('Service Worker registered'))
+                .catch(err => console.log('Service Worker registration failed:', err));
+        }
+
+        // ============================================
+        // NOTIFICATION PERMISSION
+        // ============================================
+        let notifPermission = Notification.permission;
+
+        function updatePermissionBanner() {
+            const banner = document.getElementById('permission-banner');
+            banner.classList.toggle('hidden', notifPermission !== 'default');
+        }
+
+        document.getElementById('enable-notif-btn').addEventListener('click', async () => {
+            try {
+                const permission = await Notification.requestPermission();
+                notifPermission = permission;
+                updatePermissionBanner();
+
+                if (permission === 'granted') {
+                    showToast('Desktop notifications enabled!', 'success');
+                    showDesktopNotification('Notifications Enabled', 'You will receive push alerts.');
+                } else {
+                    showToast('Permission denied. Enable in browser settings.', 'error');
+                }
+            } catch (e) {
+                showToast('Could not request permission', 'error');
+            }
+        });
+
+        function showDesktopNotification(title, message) {
+            if (notifPermission === 'granted') {
+                new Notification(title, {
+                    body: message,
+                    icon: '/static/icon.svg',
+                    tag: 'notif-' + Date.now()
+                });
+            }
+        }
+
+        updatePermissionBanner();
+
+        // ============================================
+        // TABS NAVIGATION
+        // ============================================
+        document.querySelectorAll('.tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+
+                document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+                document.getElementById(`section-${tab.dataset.section}`).classList.add('active');
+
+                if (tab.dataset.section === 'admin') {
+                    fetchDevices();
+                    fetchHistory();
+                }
+            });
+        });
+
+        // ============================================
+        // TOAST NOTIFICATIONS
+        // ============================================
+        function showToast(message, type = 'info') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            toast.className = `toast toast-${type}`;
+
+            const icons = { success: '✅', error: '❌', info: 'ℹ️' };
+            toast.innerHTML = `
+                <span>${icons[type]}</span>
+                <span>${message}</span>
+                <button class="toast-close" onclick="this.parentElement.remove()">✕</button>
+            `;
+
+            container.appendChild(toast);
+            setTimeout(() => toast.remove(), 5000);
+        }
+
+        // ============================================
+        // BUTTON LOADING STATE
+        // ============================================
+        function setLoading(btn, loading) {
+            if (loading) {
+                btn.disabled = true;
+                btn._text = btn.innerHTML;
+                btn.innerHTML = '<div class="spinner"></div> Processing...';
+            } else {
+                btn.disabled = false;
+                btn.innerHTML = btn._text || 'Submit';
+            }
+        }
+
+        // ============================================
+        // FETCH DEVICES
+        // ============================================
+        let devices = [];
+
+        async function fetchDevices() {
+            try {
+                const res = await fetch('/devices');
+                const data = await res.json();
+
+                if (data.success) {
+                    devices = data.devices;
+                    renderDevices();
+                    renderDeviceSelectBox();
+                    document.getElementById('stat-devices').textContent = data.count;
+                }
+            } catch (e) {
+                console.error('Error fetching devices:', e);
+            }
+        }
+
+        function renderDevices() {
+            const container = document.getElementById('device-list');
+
+            if (devices.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon">📱</div>
+                        <p>No devices registered</p>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = devices.map(d => `
+                <div class="device-item" data-id="${d.device_id}">
+                    <div class="device-info">
+                        <div class="device-name">${escapeHtml(d.name)}</div>
+                        <div class="device-email">${d.email || 'No email'}</div>
+                    </div>
+                    <button class="btn btn-danger" onclick="deleteDevice('${d.device_id}')">
+                        🗑️ Delete
+                    </button>
+                </div>
+            `).join('');
+        }
+
+        function renderDeviceSelectBox() {
+            const box = document.getElementById('device-select-box');
+
+            if (devices.length === 0) {
+                box.innerHTML = '<p style="color: var(--text-muted); text-align: center;">No devices available</p>';
+                return;
+            }
+
+            box.innerHTML = devices.map(d => `
+                <label class="device-select-item">
+                    <input type="checkbox" class="device-checkbox" value="${d.device_id}">
+                    <span>${escapeHtml(d.name)}</span>
+                </label>
+            `).join('');
+        }
+
+        // ============================================
+        // TARGET DEVICE RADIO
+        // ============================================
+        document.querySelectorAll('input[name="target"]').forEach(radio => {
+            radio.addEventListener('change', () => {
+                const box = document.getElementById('device-select-box');
+                box.classList.toggle('hidden', radio.value !== 'specific');
+            });
+        });
+
+        // ============================================
+        // REGISTER DEVICE
+        // ============================================
+        document.getElementById('register-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const name = document.getElementById('device-name').value.trim();
+            const email = document.getElementById('device-email').value.trim();
+            const btn = document.getElementById('register-btn');
+            const successMsg = document.getElementById('register-success');
+
+            setLoading(btn, true);
+            successMsg.classList.add('hidden');
+
+            try {
+                const res = await fetch('/devices/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, email })
+                });
+
+                const data = await res.json();
+
+                if (data.success) {
+                    successMsg.classList.remove('hidden');
+                    setTimeout(() => successMsg.classList.add('hidden'), 5000);
+                    showToast(`Device "${name}" registered!`, 'success');
+
+                    // Trigger system desktop notification for device registration
+                    triggerRegistrationNotification(name);
+
+                    document.getElementById('register-form').reset();
+                    fetchDevices();
+                } else {
+                    showToast(data.error || 'Registration failed', 'error');
+                }
+            } catch (e) {
+                showToast('Network error', 'error');
+            } finally {
+                setLoading(btn, false);
+            }
+        });
+
+        // Function to trigger desktop notification for device registration
+        async function triggerRegistrationNotification(deviceName) {
+            // Check if notifications are supported
+            if (!('Notification' in window)) {
+                return;
+            }
+
+            // If permission is granted, show notification immediately
+            if (Notification.permission === 'granted') {
+                new Notification('Device Registered', {
+                    body: `Device '${deviceName}' registered successfully.`,
+                    icon: '/static/icon.svg',
+                    tag: 'device-reg-' + Date.now()
+                });
+            }
+            // If permission not denied, request it first
+            else if (Notification.permission !== 'denied') {
+                try {
+                    const permission = await Notification.requestPermission();
+                    notifPermission = permission;
+                    updatePermissionBanner();
+
+                    if (permission === 'granted') {
+                        new Notification('Device Registered', {
+                            body: `Device '${deviceName}' registered successfully.`,
+                            icon: '/static/icon.svg',
+                            tag: 'device-reg-' + Date.now()
+                        });
+                    }
+                } catch (err) {
+                    console.log('Could not request notification permission:', err);
+                }
+            }
+        }
+
+
+        // ============================================
+        // DELETE DEVICE
+        // ============================================
+        async function deleteDevice(id) {
+            if (!confirm('Delete this device?')) return;
+
+            try {
+                const res = await fetch(`/devices/${id}`, { method: 'DELETE' });
+                const data = await res.json();
+
+                if (data.success) {
+                    showToast('Device deleted', 'success');
+                    fetchDevices();
+                } else {
+                    showToast(data.error || 'Delete failed', 'error');
+                }
+            } catch (e) {
+                showToast('Network error', 'error');
+            }
+        }
+
+        // ============================================
+        // SEND NOTIFICATION
+        // ============================================
+        document.getElementById('notification-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const title = document.getElementById('notif-title').value.trim();
+            const message = document.getElementById('notif-message').value.trim();
+            const targetAll = document.querySelector('input[name="target"]:checked').value === 'all';
+            const btn = document.getElementById('send-btn');
+
+            const body = { title, message };
+
+            if (!targetAll) {
+                const checked = document.querySelectorAll('#device-select-box input:checked');
+                const ids = Array.from(checked).map(cb => cb.value);
+
+                if (ids.length === 0) {
+                    showToast('Select at least one device', 'error');
+                    return;
+                }
+
+                body.device_ids = ids;
+            }
+
+            setLoading(btn, true);
+
+            try {
+                const res = await fetch('/notifications/send', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+
+                const data = await res.json();
+
+                if (data.success) {
+                    const stats = data.statistics;
+                    showToast(`Sent! ${stats.successful}/${stats.total_devices} delivered`, 'success');
+                    showDesktopNotification(title, message);
+                    document.getElementById('notification-form').reset();
+                    document.getElementById('device-select-box').classList.add('hidden');
+                    fetchHistory();
+                } else {
+                    showToast(data.error || 'Send failed', 'error');
+                }
+            } catch (e) {
+                showToast('Network error', 'error');
+            } finally {
+                setLoading(btn, false);
+            }
+        });
+
+        // ============================================
+        // FETCH HISTORY
+        // ============================================
+        async function fetchHistory() {
+            try {
+                const res = await fetch('/notifications/history');
+                const data = await res.json();
+
+                if (data.success) {
+                    renderHistory(data.notifications);
+                    updateStats(data.notifications);
+                }
+            } catch (e) {
+                console.error('Error fetching history:', e);
+            }
+        }
+
+        function renderHistory(notifications) {
+            const container = document.getElementById('history-list');
+
+            if (notifications.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon">📭</div>
+                        <p>No notifications sent yet</p>
+                    </div>
+                `;
+                return;
+            }
+
+            const reversed = [...notifications].reverse();
+
+            container.innerHTML = reversed.map(n => `
+                <div class="history-item">
+                    <div class="history-header">
+                        <div class="history-title">${escapeHtml(n.title)}</div>
+                        <div class="history-time">${formatTime(n.sent_at)}</div>
+                    </div>
+                    <div class="history-message">${escapeHtml(n.message)}</div>
+                    <div class="history-meta">
+                        <span class="meta-mode">${n.send_mode === 'specific' ? '📱 Specific' : '📢 All'}</span>
+                        <span class="meta-success">✅ ${n.successful} delivered</span>
+                        <span class="meta-failed">❌ ${n.failed} failed</span>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function updateStats(notifications) {
+            let sent = notifications.length;
+            let success = 0, failed = 0;
+
+            notifications.forEach(n => {
+                success += n.successful || 0;
+                failed += n.failed || 0;
+            });
+
+            document.getElementById('stat-notifications').textContent = sent;
+            document.getElementById('stat-success').textContent = success;
+            document.getElementById('stat-failed').textContent = failed;
+        }
+
+        // ============================================
+        // UTILITIES
+        // ============================================
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text || '';
+            return div.innerHTML;
+        }
+
+        function formatTime(iso) {
+            return new Date(iso).toLocaleString();
+        }
+
+        // ============================================
+        // INITIAL LOAD
+        // ============================================
+        fetchDevices();
+        fetchHistory();
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,35 @@
+# Virtual Environment (always exclude - too large, platform-specific)
+.venv/
+venv/
+env/
+.env
+
+# Python cache files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# IDE/Editor settings
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+
+# Local environment files (may contain secrets)
+.env.local
+*.local
