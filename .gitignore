@@ -33,3 +33,4 @@ build/
 # Local environment files (may contain secrets)
 .env.local
 *.local
+vapid_keys.txt
