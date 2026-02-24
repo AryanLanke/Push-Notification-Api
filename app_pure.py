@@ -1,32 +1,58 @@
 """
-Notification Delivery API - Producer/Consumer Architecture
+Notification Delivery API - Generator/Producer
 
 Flask REST API with queue-based notification delivery.
 JSON-only backend — no frontend dependencies.
 
 Architecture:
-    Producer: API endpoint enqueues notification jobs into a queue.
-    Consumer: Background worker thread dequeues and processes jobs.
-    Routing:  Notifications routed to handlers based on device_type.
+    Generator/Producer: API endpoint enqueues notification jobs.
+    Consumer:           Separate application(s) on different port(s) that
+                        receive and display notifications.
+    Broker:             Thread-safe queue bridges producer and worker pool.
+    Routing:            Device-type routing (web, mobile, pager).
 
-Device types supported:
-    - "web"    → Web Push via VAPID/pywebpush (structure prepared)
-    - "mobile" → FCM/APNs (simulated)
-    - "pager"  → Pager gateway (simulated)
+Persistence:
+    SQLite database via SQLAlchemy for device storage.
+    VAPID keys loaded from .env file.
 """
 
-from flask import Flask, request, jsonify
-import threading
-import queue
-import time
-import uuid
+from flask import Flask, request, jsonify, render_template
+from flask_sqlalchemy import SQLAlchemy
+from dotenv import load_dotenv
+import os
+import socket
 import json
+import requests
+import queue
+import threading
+import uuid
+import time
 from datetime import datetime
+from pywebpush import webpush, WebPushException
+
+def get_network_ip():
+    """Get the local network IP address of this machine."""
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except Exception:
+        return "127.0.0.1"
+
+# Load environment variables from .env
+load_dotenv()
 
 # ============================================================================
 # FLASK APP INITIALIZATION
 # ============================================================================
 app = Flask(__name__)
+
+# Database configuration (SQLite)
+app.config["SQLALCHEMY_DATABASE_URI"] = os.getenv("DATABASE_URI", "sqlite:///notifications.db")
+app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+db = SQLAlchemy(app)
 
 # CORS configuration
 try:
@@ -42,94 +68,148 @@ except ImportError:
         return response
     print("⚠ CORS enabled via manual headers (install flask-cors for better support)")
 
+# ============================================================================
+# VAPID CONFIGURATION (from .env)
+# ============================================================================
+VAPID_PRIVATE_KEY = os.getenv("VAPID_PRIVATE_KEY", "").replace("\\n", "\n")
+VAPID_PUBLIC_KEY = os.getenv("VAPID_PUBLIC_KEY", "")
+VAPID_CLAIMS = {"sub": os.getenv("VAPID_CLAIMS_EMAIL", "mailto:admin@example.com")}
+
 VALID_DEVICE_TYPES = ["web", "mobile", "pager"]
 
-# ============================================================================
-# VAPID CONFIGURATION (Web Push)
-# ============================================================================
-VAPID_PRIVATE_KEY = """-----BEGIN PRIVATE KEY-----
-MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgXZPF2yqh5c2NRQd0
-IshEqtynnMwLXNJ8XWkSh6lI+HKhRANCAASp7Fvl3l7pYu6WtEITxLn6/y0OmbXs
-gr13n+MrJxon10RHtlRfAInHaceoBOqBhmrtKAmNGmJ7RsW3ADwUlrVd
------END PRIVATE KEY-----"""
+def send_web_push(device_dict, title, message):
+    """
+    Send notification to a web consumer.
+    Checks if it's a 'Simulation' (IP/Port) or a 'Real Browser' (VAPID).
+    """
+    sub_json = device_dict.get('subscription_data')
+    
+    if sub_json:
+        # 🔗 REAL WEB PUSH (VAPID)
+        try:
+            subscription = json.loads(sub_json)
+            payload = json.dumps({"title": title, "body": message})
+            
+            webpush(
+                subscription_info=subscription,
+                data=payload,
+                vapid_private_key=VAPID_PRIVATE_KEY,
+                vapid_claims=VAPID_CLAIMS
+            )
+            print(f"[REAL-WEB] Delivered via global push to '{device_dict['name']}'")
+            return {"device_id": device_dict["id"], "device_name": device_dict["name"],
+                    "device_type": "web", "status": "success",
+                    "message": "Delivered via Global Push Service",
+                    "received_at": datetime.now().isoformat()}
+        except WebPushException as ex:
+            print(f"[WEB:VAPID-FAIL] {ex}")
+            return {"device_id": device_dict["id"], "device_name": device_dict["name"],
+                    "device_type": "web", "status": "failed",
+                    "message": f"Global Push Error: {ex}"}
+        except Exception as e:
+            return {"device_id": device_dict["id"], "device_name": device_dict["name"],
+                    "device_type": "web", "status": "failed",
+                    "message": f"System Error: {str(e)}"}
+            
+    else:
+        # 🔄 SIMULATION (Local HTTP)
+        address = f"http://{device_dict['ip_address']}:{device_dict['port']}/receive"
+        try:
+            payload = {"title": title, "message": message, "from": "Generator API"}
+            response = requests.post(address, json=payload, timeout=5)
+            if response.status_code == 200:
+                return {"device_id": device_dict["id"], "device_name": device_dict["name"],
+                        "device_type": "web", "status": "success",
+                        "message": "Delivered to simulation server"}
+            return {"device_id": device_dict["id"], "device_name": device_dict["name"],
+                    "device_type": "web", "status": "failed",
+                    "message": f"Consumer error: {response.status_code}"}
+        except Exception as e:
+            return {"device_id": device_dict["id"], "device_name": device_dict["name"],
+                    "device_type": "web", "status": "failed",
+                    "message": f"Connection failed: {str(e)}"}
 
-VAPID_PUBLIC_KEY = "BKnsW-XeXuli7pa0QhPEufr_LQ6ZteyCvXef4ysnGifXREe2VF8Aicdpx6gE6oGGau0oCY0aYntGxbcAPBSWtV0"
+# ============================================================================
+# DATABASE MODELS
+# ============================================================================
 
-VAPID_CLAIMS = {"sub": "mailto:admin@example.com"}
+class Device(db.Model):
+    """Registered device stored in the database."""
+    __tablename__ = "devices"
+
+    id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    name = db.Column(db.String(100), nullable=False)
+    device_type = db.Column(db.String(20), nullable=False, default="web")
+    ip_address = db.Column(db.String(50), nullable=False, default="127.0.0.1")
+    port = db.Column(db.Integer, nullable=False, default=5001)
+    email = db.Column(db.String(100), default="")
+    subscription_data = db.Column(db.Text, nullable=True)
+    registered_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            "device_id": self.id,
+            "name": self.name,
+            "device_type": self.device_type,
+            "ip_address": self.ip_address,
+            "port": self.port,
+            "email": self.email,
+            "has_subscription": bool(self.subscription_data),
+            "address": f"http://{self.ip_address}:{self.port}",
+            "registered_at": self.registered_at.isoformat()
+        }
+
+
+class Notification(db.Model):
+    """Notification history stored in the database."""
+    __tablename__ = "notifications"
+
+    id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    title = db.Column(db.String(200), nullable=False)
+    message = db.Column(db.Text, nullable=False)
+    enqueued_at = db.Column(db.DateTime, default=datetime.utcnow)
+    processed_at = db.Column(db.DateTime, nullable=True)
+    total_devices = db.Column(db.Integer, default=0)
+    successful = db.Column(db.Integer, default=0)
+    failed = db.Column(db.Integer, default=0)
+    status = db.Column(db.String(20), default="queued")
+    details = db.Column(db.Text, default="[]")
+
+
+# Create tables on startup
+with app.app_context():
+    db.create_all()
+    print("✓ Database initialized (SQLite)")
 
 # ============================================================================
-# IN-MEMORY STORAGE
+# MESSAGE QUEUE (Producer → Worker Pool bridge)
 # ============================================================================
-# {device_id: {token, name, email, device_type, subscription_data, registered_at}}
-registered_devices = {}
-
-notification_history = []
-
-# ============================================================================
-# MESSAGE QUEUE (Producer → Consumer bridge)
-# ============================================================================
-# Jobs are dicts: {job_id, title, message, target_devices, enqueued_at}
 notification_queue = queue.Queue()
 
-# Tracks job processing results by job_id
-# {job_id: {status, enqueued_at, processed_at, results}}
+# Tracks job processing results by job_id (in-memory for speed)
 job_tracker = {}
 
 # ============================================================================
 # NOTIFICATION HANDLERS (per device type)
 # ============================================================================
 
-def send_web_push(device_id, device_info, title, message):
-    """
-    Send web push notification.
-    Uses VAPID + pywebpush when real keys are configured.
-    Falls back to simulation if keys are placeholders.
-    """
-    subscription_data = device_info.get("subscription_data")
-
-    if VAPID_PRIVATE_KEY != "PLACEHOLDER_PRIVATE_KEY" and subscription_data:
-        # Real web push path — requires: pip install pywebpush
-        try:
-            from pywebpush import webpush, WebPushException
-            payload = json.dumps({"title": title, "body": message})
-            webpush(
-                subscription_info=subscription_data,
-                data=payload,
-                vapid_private_key=VAPID_PRIVATE_KEY,
-                vapid_claims=VAPID_CLAIMS
-            )
-            print(f"[WEB] Push sent to '{device_info['name']}' (ID: {device_id})")
-            return {"device_id": device_id, "device_name": device_info["name"],
-                    "device_type": "web", "status": "success",
-                    "message": "Web push delivered"}
-        except Exception as e:
-            print(f"[WEB:FAIL] {device_info['name']}: {e}")
-            return {"device_id": device_id, "device_name": device_info["name"],
-                    "device_type": "web", "status": "failed",
-                    "message": str(e)}
-    else:
-        # Simulation mode
-        time.sleep(0.15)
-        print(f"[WEB:SIM] Push simulated for '{device_info['name']}' (ID: {device_id})")
-        return {"device_id": device_id, "device_name": device_info["name"],
-                "device_type": "web", "status": "success",
-                "message": "Web push simulated (VAPID keys not configured)"}
+# Handled globally by the dual-mode send_web_push implementation
 
 
-def send_mobile_push(device_id, device_info, title, message):
+def send_mobile_push(device_dict, title, message):
     """Send mobile push notification. Replace with FCM/APNs integration."""
     time.sleep(0.2)
-    print(f"[MOBILE:SIM] Push simulated for '{device_info['name']}' (ID: {device_id})")
-    return {"device_id": device_id, "device_name": device_info["name"],
+    print(f"[MOBILE:SIM] Push simulated for '{device_dict['name']}' (ID: {device_dict['id']})")
+    return {"device_id": device_dict["id"], "device_name": device_dict["name"],
             "device_type": "mobile", "status": "success",
             "message": "Mobile push simulated (integrate FCM/APNs for production)"}
 
 
-def send_pager_notification(device_id, device_info, title, message):
+def send_pager_notification(device_dict, title, message):
     """Send pager notification. Replace with pager gateway integration."""
     time.sleep(0.1)
-    print(f"[PAGER:SIM] Alert simulated for '{device_info['name']}' (ID: {device_id})")
-    return {"device_id": device_id, "device_name": device_info["name"],
+    print(f"[PAGER:SIM] Alert simulated for '{device_dict['name']}' (ID: {device_dict['id']})")
+    return {"device_id": device_dict["id"], "device_name": device_dict["name"],
             "device_type": "pager", "status": "success",
             "message": "Pager alert simulated (integrate pager gateway for production)"}
 
@@ -142,37 +222,36 @@ DEVICE_HANDLERS = {
 }
 
 # ============================================================================
-# CONSUMER — Background worker thread
+# CONSUMER — Background worker pool
 # ============================================================================
-
 WORKER_POOL_SIZE = 5
+
 
 def notification_worker(worker_id):
     """
     Continuously consumes jobs from notification_queue.
-    Each job fans out to per-device threads, routed by device_type.
+    Routes each device to the correct handler.
     Runs in a daemon thread — exits when the main process stops.
     """
     while True:
-        job = notification_queue.get()  # Blocks until a job is available
+        job = notification_queue.get()
         job_id = job["job_id"]
         title = job["title"]
         message = job["message"]
         target_devices = job["target_devices"]
 
-        print(f"\n[CONSUMER-{worker_id}] Processing job {job_id}: '{title}' → {len(target_devices)} device(s)")
+        print(f"\n[WORKER-{worker_id}] Processing job {job_id}: '{title}' → {len(target_devices)} device(s)")
 
         job_tracker[job_id]["status"] = "processing"
 
         results = []
         threads = []
 
-        for device_id, device_info in target_devices.items():
-            device_type = device_info.get("device_type", "web")
-            handler = DEVICE_HANDLERS.get(device_type, send_web_push)
+        for device_dict in target_devices:
+            handler = DEVICE_HANDLERS.get(device_dict["device_type"], send_web_push)
 
-            def _dispatch(did=device_id, dinfo=device_info, h=handler):
-                result = h(did, dinfo, title, message)
+            def _dispatch(d=device_dict, h=handler):
+                result = h(d, title, message)
                 results.append(result)
 
             t = threading.Thread(target=_dispatch)
@@ -185,30 +264,27 @@ def notification_worker(worker_id):
         successful = len([r for r in results if r["status"] == "success"])
         failed = len([r for r in results if r["status"] == "failed"])
 
-        # Record to history
-        record = {
-            "id": job_id,
-            "title": title,
-            "message": message,
-            "enqueued_at": job["enqueued_at"],
-            "processed_at": datetime.now().isoformat(),
-            "total_devices": len(target_devices),
-            "successful": successful,
-            "failed": failed,
-            "details": results
-        }
-        notification_history.append(record)
+        # Update database record
+        with app.app_context():
+            notif = db.session.get(Notification, job_id)
+            if notif:
+                notif.processed_at = datetime.utcnow()
+                notif.successful = successful
+                notif.failed = failed
+                notif.status = "completed"
+                notif.details = json.dumps(results)
+                db.session.commit()
 
-        # Update job tracker
+        # Update in-memory tracker
         job_tracker[job_id].update({
             "status": "completed",
-            "processed_at": record["processed_at"],
+            "processed_at": datetime.now().isoformat(),
             "successful": successful,
             "failed": failed,
             "results": results
         })
 
-        print(f"[CONSUMER-{worker_id}] Job {job_id} done — {successful} ok, {failed} failed")
+        print(f"[WORKER-{worker_id}] Job {job_id} done — {successful} ok, {failed} failed")
         notification_queue.task_done()
 
 
@@ -216,30 +292,62 @@ def notification_worker(worker_id):
 for i in range(WORKER_POOL_SIZE):
     t = threading.Thread(target=notification_worker, args=(i + 1,), daemon=True)
     t.start()
-print(f"✓ Worker pool started ({WORKER_POOL_SIZE} consumers)")
+print(f"✓ Worker pool started ({WORKER_POOL_SIZE} workers)")
 
 # ============================================================================
 # API ENDPOINTS
 # ============================================================================
 
+@app.route("/", methods=["GET"])
+def admin_dashboard():
+    """Serve the Admin Dashboard frontend."""
+    return render_template("admin.html")
+
+
+@app.route("/register", methods=["GET"])
+def register_page():
+    """Serve the Device Registration page (separate from admin panel)."""
+    return render_template("register.html")
+
+
+@app.route("/client", methods=["GET"])
+def client_page():
+    """Serve the Real-World Consumer endpoint for phones/laptops."""
+    return render_template("client.html")
+
+
+@app.route("/vapid-public-key", methods=["GET"])
+def public_key():
+    """Return the VAPID public key for browser subscription."""
+    return jsonify({"public_key": VAPID_PUBLIC_KEY})
+
+
+@app.route("/sw.js")
+def service_worker():
+    """Serve the Service Worker script from the static folder."""
+    return app.send_static_file("sw.js")
+
+
 @app.route("/api", methods=["GET"])
 def api_info():
     """Return API info and endpoints."""
     return jsonify({
-        "message": "Notification Delivery API — Producer/Consumer Architecture",
-        "version": "2.0.0",
-        "architecture": "Queue-based producer/consumer with device-type routing",
+        "message": "Notification Delivery API — Generator/Producer",
+        "version": "3.0.0",
+        "architecture": "Distributed Generator-Consumer with SQLite persistence",
         "device_types": VALID_DEVICE_TYPES,
+        "persistence": "SQLite database",
+        "worker_pool": WORKER_POOL_SIZE,
+        "network_ip": get_network_ip(),
         "endpoints": {
             "GET  /api": "This info",
             "GET  /devices": "List all registered devices",
-            "POST /devices/register": "Register a device (web/mobile/pager)",
-            "POST /devices/subscribe": "Store web push subscription for a device",
+            "POST /devices/register": "Register a device (with IP/port)",
             "DELETE /devices/<device_id>": "Remove a device",
             "POST /notifications/send": "Enqueue notification (producer)",
             "GET  /notifications/status/<job_id>": "Check job processing status",
             "GET  /notifications/history": "View notification history",
-            "GET  /vapid/public-key": "Get VAPID public key for web push"
+            "GET  /vapid/public-key": "Get VAPID public key"
         }
     }), 200
 
@@ -250,7 +358,7 @@ def get_vapid_key():
     return jsonify({
         "success": True,
         "public_key": VAPID_PUBLIC_KEY,
-        "configured": VAPID_PUBLIC_KEY != "PLACEHOLDER_PUBLIC_KEY"
+        "configured": bool(VAPID_PUBLIC_KEY)
     }), 200
 
 
@@ -260,18 +368,9 @@ def get_vapid_key():
 
 @app.route("/devices", methods=["GET"])
 def list_devices():
-    """List all registered devices."""
-    devices_list = [
-        {
-            "device_id": device_id,
-            "name": info.get("name", "Unknown"),
-            "email": info.get("email", ""),
-            "device_type": info.get("device_type", "web"),
-            "has_subscription": bool(info.get("subscription_data")),
-            "registered_at": info.get("registered_at", "Unknown")
-        }
-        for device_id, info in registered_devices.items()
-    ]
+    """List all registered devices from the database."""
+    devices = Device.query.all()
+    devices_list = [d.to_dict() for d in devices]
 
     return jsonify({
         "success": True,
@@ -284,8 +383,8 @@ def list_devices():
 @app.route("/devices/register", methods=["POST"])
 def register_device():
     """
-    Register a new device.
-    Body: {name: required, email: optional, device_type: "web"|"mobile"|"pager"}
+    Register a new device with IP address and port.
+    Body: {name: required, ip_address: optional, port: optional, device_type: optional}
     """
     data = request.get_json()
 
@@ -304,9 +403,7 @@ def register_device():
             "hint": "The 'name' field is required and cannot be empty"
         }), 400
 
-    email = data.get("email", "").strip()
     device_type = data.get("device_type", "web").strip().lower()
-
     if device_type not in VALID_DEVICE_TYPES:
         return jsonify({
             "success": False,
@@ -314,82 +411,36 @@ def register_device():
             "hint": f"Must be one of: {VALID_DEVICE_TYPES}"
         }), 400
 
-    device_id = str(uuid.uuid4())
+    ip_address = data.get("ip_address", "127.0.0.1").strip()
+    port = data.get("port", 5001)
+    email = data.get("email", "").strip()
 
-    registered_devices[device_id] = {
-        "token": device_id,
-        "name": device_name,
-        "device_type": device_type,
-        "subscription_data": None,
-        "registered_at": datetime.now().isoformat()
-    }
+    device = Device(
+        name=device_name,
+        device_type=device_type,
+        ip_address=ip_address,
+        port=int(port),
+        email=email
+    )
+    db.session.add(device)
+    db.session.commit()
 
-    print(f"[NEW DEVICE] Registered: '{device_name}' type={device_type} (ID: {device_id})")
+    print(f"[NEW DEVICE] Registered: '{device_name}' type={device_type} "
+          f"at {ip_address}:{port} (ID: {device.id})")
 
     return jsonify({
         "success": True,
         "message": "Device registered successfully",
-        "device_id": device_id,
-        "device_name": device_name,
-        "device_type": device_type,
-        "email": email,
-        "registered_at": registered_devices[device_id]["registered_at"]
+        "device": device.to_dict()
     }), 201
-
-
-@app.route("/devices/subscribe", methods=["POST"])
-def subscribe_device():
-    """
-    Store web push subscription object for an existing device.
-    Body: {device_id: required, subscription: {endpoint, keys: {p256dh, auth}}}
-    Used by browser clients after calling PushManager.subscribe().
-    """
-    data = request.get_json()
-
-    if not data:
-        return jsonify({"success": False, "error": "No JSON data provided"}), 400
-
-    device_id = data.get("device_id", "").strip()
-    subscription = data.get("subscription")
-
-    if not device_id:
-        return jsonify({"success": False, "error": "Missing field: 'device_id'"}), 400
-
-    if device_id not in registered_devices:
-        return jsonify({"success": False, "error": "Device not found"}), 404
-
-    if not subscription or not isinstance(subscription, dict):
-        return jsonify({
-            "success": False,
-            "error": "Missing or invalid 'subscription' object",
-            "hint": "Pass the PushSubscription object from PushManager.subscribe()"
-        }), 400
-
-    # Validate subscription structure
-    endpoint = subscription.get("endpoint", "")
-    keys = subscription.get("keys", {})
-    if not endpoint or not keys.get("p256dh") or not keys.get("auth"):
-        return jsonify({
-            "success": False,
-            "error": "Subscription must contain endpoint and keys (p256dh, auth)"
-        }), 400
-
-    registered_devices[device_id]["subscription_data"] = subscription
-    registered_devices[device_id]["device_type"] = "web"
-
-    print(f"[SUBSCRIBE] Web push subscription stored for device {device_id}")
-
-    return jsonify({
-        "success": True,
-        "message": "Web push subscription stored",
-        "device_id": device_id
-    }), 200
 
 
 @app.route("/devices/<device_id>", methods=["DELETE"])
 def unregister_device(device_id):
-    """Remove a device by ID."""
-    if device_id not in registered_devices:
+    """Remove a device by ID from the database."""
+    device = db.session.get(Device, device_id)
+
+    if not device:
         return jsonify({
             "success": False,
             "error": "Device not found",
@@ -397,28 +448,29 @@ def unregister_device(device_id):
             "hint": "Check the device_id or use GET /devices to see all registered devices"
         }), 404
 
-    device_info = registered_devices[device_id]
-    del registered_devices[device_id]
+    device_name = device.name
+    db.session.delete(device)
+    db.session.commit()
 
-    print(f"[REMOVED] Device unregistered: '{device_info.get('name')}' (ID: {device_id})")
+    print(f"[REMOVED] Device unregistered: '{device_name}' (ID: {device_id})")
 
     return jsonify({
         "success": True,
         "message": "Device unregistered successfully",
         "device_id": device_id,
-        "device_name": device_info.get("name", "Unknown")
+        "device_name": device_name
     }), 200
 
 
 # ============================================================================
-# NOTIFICATION ENDPOINTS (PRODUCER)
+# NOTIFICATION ENDPOINTS (GENERATOR/PRODUCER)
 # ============================================================================
 
 @app.route("/notifications/send", methods=["POST"])
 def send_notification():
     """
-    Producer endpoint — validates and enqueues a notification job.
-    Does NOT process inline. Consumer worker handles delivery.
+    Generator/Producer endpoint — validates and enqueues a notification job.
+    Workers deliver to consumer devices at their registered IP:port.
     Body: {title, message, device_ids (optional)}
     """
     data = request.get_json()
@@ -432,38 +484,20 @@ def send_notification():
 
     title = data.get("title", "").strip()
     message = data.get("message", "").strip()
-
     device_ids = data.get("device_ids", [])
     if not device_ids and data.get("device_id"):
         device_ids = [data.get("device_id")]
 
     if not title:
-        return jsonify({
-            "success": False,
-            "error": "Missing required field: 'title'"
-        }), 400
+        return jsonify({"success": False, "error": "Missing required field: 'title'"}), 400
 
     if not message:
-        return jsonify({
-            "success": False,
-            "error": "Missing required field: 'message'"
-        }), 400
+        return jsonify({"success": False, "error": "Missing required field: 'message'"}), 400
 
-    if not registered_devices:
-        return jsonify({
-            "success": False,
-            "error": "No devices registered"
-        }), 404
-
-    # Resolve target devices
+    # Fetch target devices from database
     if device_ids:
-        target_devices = {}
-        not_found = []
-        for dev_id in device_ids:
-            if dev_id in registered_devices:
-                target_devices[dev_id] = registered_devices[dev_id].copy()
-            else:
-                not_found.append(dev_id)
+        target_devices = Device.query.filter(Device.id.in_(device_ids)).all()
+        not_found = [did for did in device_ids if did not in [d.id for d in target_devices]]
 
         if not target_devices:
             return jsonify({
@@ -472,37 +506,65 @@ def send_notification():
                 "not_found": not_found
             }), 404
     else:
-        target_devices = {k: v.copy() for k, v in registered_devices.items()}
+        target_devices = Device.query.all()
 
-    # Create job and enqueue (this is the PRODUCER action)
+    if not target_devices:
+        return jsonify({
+            "success": False,
+            "error": "No devices registered",
+            "hint": "Register at least one device before sending notifications"
+        }), 404
+
+    # Create notification record in database
     job_id = str(uuid.uuid4())
-    enqueued_at = datetime.now().isoformat()
+    notif = Notification(
+        id=job_id,
+        title=title,
+        message=message,
+        total_devices=len(target_devices),
+        status="queued"
+    )
+    db.session.add(notif)
+    db.session.commit()
 
+    # Convert Device model objects to plain dicts (safe for background threads)
+    device_dicts = [{
+        "id": d.id,
+        "name": d.name,
+        "device_type": d.device_type,
+        "ip_address": d.ip_address,
+        "port": d.port
+    } for d in target_devices]
+
+    # Create job and enqueue (GENERATOR/PRODUCER action)
     job = {
         "job_id": job_id,
         "title": title,
         "message": message,
-        "target_devices": target_devices,
-        "enqueued_at": enqueued_at
+        "target_devices": device_dicts,
+        "enqueued_at": datetime.now().isoformat()
     }
 
     job_tracker[job_id] = {
         "status": "queued",
-        "enqueued_at": enqueued_at,
-        "total_devices": len(target_devices),
+        "enqueued_at": job["enqueued_at"],
+        "total_devices": len(device_dicts),
         "title": title
     }
 
     notification_queue.put(job)
 
-    print(f"[PRODUCER] Enqueued job {job_id}: '{title}' → {len(target_devices)} device(s)")
+    target_addresses = [f"http://{d['ip_address']}:{d['port']}" for d in device_dicts]
+    print(f"[GENERATOR] Enqueued job {job_id}: '{title}' → {len(device_dicts)} device(s)")
+    print(f"[GENERATOR] Targets: {target_addresses}")
 
     return jsonify({
         "success": True,
         "message": "Notification job enqueued",
         "job_id": job_id,
         "status": "queued",
-        "total_devices": len(target_devices),
+        "total_devices": len(device_dicts),
+        "target_addresses": target_addresses,
         "hint": f"Track status at GET /notifications/status/{job_id}"
     }), 202
 
@@ -510,36 +572,64 @@ def send_notification():
 @app.route("/notifications/status/<job_id>", methods=["GET"])
 def get_job_status(job_id):
     """Check the processing status of a notification job."""
-    if job_id not in job_tracker:
+    if job_id in job_tracker:
+        job = job_tracker[job_id]
+        return jsonify({
+            "success": True,
+            "job_id": job_id,
+            "status": job["status"],
+            "enqueued_at": job.get("enqueued_at"),
+            "processed_at": job.get("processed_at"),
+            "total_devices": job.get("total_devices"),
+            "successful": job.get("successful"),
+            "failed": job.get("failed"),
+            "results": job.get("results")
+        }), 200
+
+    # Fallback to database
+    notif = db.session.get(Notification, job_id)
+    if not notif:
         return jsonify({
             "success": False,
             "error": "Job not found",
             "hint": "Check the job_id returned from POST /notifications/send"
         }), 404
 
-    job = job_tracker[job_id]
-
     return jsonify({
         "success": True,
         "job_id": job_id,
-        "status": job["status"],
-        "enqueued_at": job.get("enqueued_at"),
-        "processed_at": job.get("processed_at"),
-        "total_devices": job.get("total_devices"),
-        "successful": job.get("successful"),
-        "failed": job.get("failed"),
-        "results": job.get("results")
+        "status": notif.status,
+        "enqueued_at": notif.enqueued_at.isoformat() if notif.enqueued_at else None,
+        "processed_at": notif.processed_at.isoformat() if notif.processed_at else None,
+        "total_devices": notif.total_devices,
+        "successful": notif.successful,
+        "failed": notif.failed,
+        "results": json.loads(notif.details) if notif.details else []
     }), 200
 
 
 @app.route("/notifications/history", methods=["GET"])
 def get_notification_history():
-    """Get notification history (last 50)."""
+    """Get notification history from the database."""
+    notifications = Notification.query.order_by(Notification.enqueued_at.desc()).limit(50).all()
+
+    history = [{
+        "id": n.id,
+        "title": n.title,
+        "message": n.message,
+        "status": n.status,
+        "enqueued_at": n.enqueued_at.isoformat() if n.enqueued_at else None,
+        "processed_at": n.processed_at.isoformat() if n.processed_at else None,
+        "total_devices": n.total_devices,
+        "successful": n.successful,
+        "failed": n.failed
+    } for n in notifications]
+
     return jsonify({
         "success": True,
-        "message": f"Found {len(notification_history)} notification(s) in history",
-        "count": len(notification_history),
-        "notifications": notification_history[-50:]
+        "message": f"Found {len(history)} notification(s) in history",
+        "count": len(history),
+        "notifications": history
     }), 200
 
 
@@ -549,31 +639,17 @@ def get_notification_history():
 
 @app.errorhandler(404)
 def not_found(error):
-    """Handle 404 errors."""
-    return jsonify({
-        "success": False,
-        "error": "Endpoint not found",
-        "hint": "Use GET /api for available endpoints."
-    }), 404
-
+    return jsonify({"success": False, "error": "Endpoint not found",
+                    "hint": "Use GET /api for available endpoints."}), 404
 
 @app.errorhandler(405)
 def method_not_allowed(error):
-    """Handle 405 errors."""
-    return jsonify({
-        "success": False,
-        "error": "Method not allowed",
-        "hint": "Check the HTTP method (GET, POST, DELETE)"
-    }), 405
-
+    return jsonify({"success": False, "error": "Method not allowed",
+                    "hint": "Check the HTTP method (GET, POST, DELETE)"}), 405
 
 @app.errorhandler(500)
 def internal_error(error):
-    """Handle 500 errors."""
-    return jsonify({
-        "success": False,
-        "error": "Internal server error"
-    }), 500
+    return jsonify({"success": False, "error": "Internal server error"}), 500
 
 
 # ============================================================================
@@ -581,7 +657,6 @@ def internal_error(error):
 # ============================================================================
 
 def get_local_ip():
-    """Get local network IP address."""
     import socket
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -593,22 +668,21 @@ def get_local_ip():
         return "127.0.0.1"
 
 if __name__ == "__main__":
-    import os
-
     if os.environ.get("WERKZEUG_RUN_MAIN") != "true":
         local_ip = get_local_ip()
         print("=" * 60)
-        print("NOTIFICATION API v2 — Producer/Consumer")
+        print("NOTIFICATION API v3 — Generator/Producer")
         print("=" * 60)
         print(f"  Local:   http://localhost:5000")
         print(f"  Network: http://{local_ip}:5000")
         print(f"  API:     http://localhost:5000/api")
         print("")
         print("Architecture:")
-        print("  Producer → Queue → Consumer → Device Handlers")
-        print("  Device types: web | mobile | pager")
+        print("  Generator → Queue → Workers → Consumer Devices")
+        print(f"  Worker Pool: {WORKER_POOL_SIZE} threads")
+        print("  Database: SQLite (notifications.db)")
         print("")
         print("Press Ctrl+C to stop")
         print("=" * 60)
 
-    app.run(host="0.0.0.0", port=5000, debug=True)           
+    app.run(host="0.0.0.0", port=5000, debug=True)

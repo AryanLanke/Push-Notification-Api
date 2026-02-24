@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Global Web Consumer — Real-World Push</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #0f172a;
+            --card: #1e293b;
+            --accent: #6366f1;
+            --success: #10b981;
+            --text: #f8fafc;
+            --muted: #94a3b8;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .card {
+            background: var(--card);
+            border-radius: 24px;
+            padding: 40px;
+            width: 100%;
+            max-width: 440px;
+            text-align: center;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .icon {
+            font-size: 4rem;
+            margin-bottom: 20px;
+            color: var(--accent);
+        }
+
+        h1 {
+            font-weight: 800;
+            font-size: 1.8rem;
+            margin-bottom: 12px;
+        }
+
+        p {
+            color: var(--muted);
+            margin-bottom: 32px;
+            line-height: 1.6;
+        }
+
+        .btn {
+            width: 100%;
+            padding: 16px;
+            border: none;
+            border-radius: 12px;
+            font-family: inherit;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            background: var(--accent);
+            color: white;
+            box-shadow: 0 4px 14px 0 rgba(99, 102, 241, 0.39);
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            opacity: 0.9;
+        }
+
+        .btn:disabled {
+            background: var(--muted);
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        #status {
+            margin-top: 24px;
+            font-size: 0.9rem;
+            padding: 12px;
+            border-radius: 8px;
+            display: none;
+        }
+
+        .st-success {
+            background: rgba(16, 185, 129, 0.1);
+            color: var(--success);
+            display: block !important;
+        }
+
+        .st-error {
+            background: rgba(239, 68, 68, 0.1);
+            color: #ef4444;
+            display: block !important;
+        }
+
+        .footer {
+            margin-top: 40px;
+            font-size: 0.75rem;
+            color: var(--muted);
+        }
+    </style>
+</head>
+
+<body>
+    <div class="card">
+        <div class="icon">🌍</div>
+        <h1>Global Consumer</h1>
+        <p>This allows you to receive notifications even when this tab is closed and your browser is off.</p>
+
+        <div id="setup">
+            <input type="text" id="devName" placeholder="Enter Device Name (e.g. My Phone)" style="width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #334155; 
+                background: #0f172a; color: white; margin-bottom: 20px; font-family: inherit;">
+            <button class="btn" id="subBtn" onclick="subscribe()">Enable Global Notifications</button>
+        </div>
+
+        <div id="status"></div>
+
+        <div class="footer">
+            Architecture: VAPID + Service Worker (PWA Standard)
+        </div>
+    </div>
+
+    <script>
+        const API = window.location.origin;
+
+        function showStatus(msg, type) {
+            const el = document.getElementById('status');
+            el.textContent = msg;
+            el.className = type === 'success' ? 'st-success' : 'st-error';
+        }
+
+        async function subscribe() {
+            const name = document.getElementById('devName').value.trim();
+            if (!name) { alert("Please enter a device name"); return; }
+
+            const btn = document.getElementById('subBtn');
+            btn.disabled = true;
+            btn.textContent = "Setting up...";
+
+            try {
+                // 1. Check if Service Worker is supported
+                if (!('serviceWorker' in navigator)) throw new Error("Service Worker not supported");
+
+                // 2. Request permission
+                const permission = await Notification.requestPermission();
+                if (permission !== 'granted') throw new Error("Permission denied");
+
+                // 3. Register SW
+                const reg = await navigator.serviceWorker.register('/sw.js');
+                console.log("SW Registered", reg);
+
+                // 4. Get VAPID public key
+                const keyRes = await fetch(`${API}/vapid-public-key`);
+                const { public_key } = await keyRes.json();
+
+                // 5. Subscribe
+                const sub = await reg.pushManager.subscribe({
+                    userVisibleOnly: true,
+                    applicationServerKey: urlBase64ToUint8Array(public_key)
+                });
+
+                // 6. Send subscription to our backend
+                const regRes = await fetch(`${API}/devices/register`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        name: name,
+                        device_type: 'web',
+                        ip_address: '0.0.0.0', // Used as identifier for real push
+                        port: 0,
+                        subscription_data: JSON.stringify(sub)
+                    })
+                });
+
+                if (regRes.ok) {
+                    document.getElementById('setup').style.display = 'none';
+                    showStatus("✅ Success! You can now close this tab. Try sending a notification from the Admin Panel.", "success");
+                } else {
+                    throw new Error("Backend registration failed");
+                }
+
+            } catch (e) {
+                console.error(e);
+                showStatus("❌ Error: " + e.message, "error");
+                btn.disabled = false;
+                btn.textContent = "Enable Global Notifications";
+            }
+        }
+
+        function urlBase64ToUint8Array(base64String) {
+            const padding = '='.repeat((4 - base64String.length % 4) % 4);
+            const base64 = (base64String + padding).replace(/\-/g, '+').replace(/_/g, '/');
+            const rawData = window.atob(base64);
+            const outputArray = new Uint8Array(rawData.length);
+            for (let i = 0; i < rawData.length; ++i) {
+                outputArray[i] = rawData.charCodeAt(i);
+            }
+            return outputArray;
+        }
+    </script>
+</body>
+
+</html>
