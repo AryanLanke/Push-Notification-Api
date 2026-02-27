@@ -298,21 +298,34 @@ print(f"✓ Worker pool started ({WORKER_POOL_SIZE} workers)")
 # API ENDPOINTS
 # ============================================================================
 
+# ----------------------------------------------------------------------------
+# PAGE ROUTES (HTML Templates)
+# ----------------------------------------------------------------------------
+
 @app.route("/", methods=["GET"])
 def admin_dashboard():
-    """Serve the Admin Dashboard frontend."""
+    """
+    Serve the main Admin Dashboard interface.
+    Used for monitoring devices, sending broadcasts, and viewing history.
+    """
     return render_template("admin.html")
 
 
 @app.route("/register", methods=["GET"])
 def register_page():
-    """Serve the Device Registration page (separate from admin panel)."""
+    """
+    Serve the standalone Device Registration page.
+    This page allows new consumer devices to manually register with the server.
+    """
     return render_template("register.html")
 
 
 @app.route("/client", methods=["GET"])
 def client_page():
-    """Serve the Real-World Consumer endpoint for phones/laptops."""
+    """
+    Serve the Real-World Consumer endpoint page.
+    Used by browser-based clients (phones/laptops) to subscribe via VAPID.
+    """
     return render_template("client.html")
 
 
@@ -328,9 +341,16 @@ def service_worker():
     return app.send_static_file("sw.js")
 
 
+# ----------------------------------------------------------------------------
+# SYSTEM API ENDPOINTS
+# ----------------------------------------------------------------------------
+
 @app.route("/api", methods=["GET"])
 def api_info():
-    """Return API info and endpoints."""
+    """
+    Discovery Endpoint: Returns system information, architecture details,
+    and a list of all available REST API endpoints.
+    """
     return jsonify({
         "message": "Notification Delivery API — Generator/Producer",
         "version": "3.0.0",
@@ -368,7 +388,10 @@ def get_vapid_key():
 
 @app.route("/devices", methods=["GET"])
 def list_devices():
-    """List all registered devices from the database."""
+    """
+    DATA RETRIEVAL: Fetches and returns a list of all devices stored in SQLite.
+    Returns: JSON list of objects with ID, Name, IP, Port, and Registration Time.
+    """
     devices = Device.query.all()
     devices_list = [d.to_dict() for d in devices]
 
@@ -383,10 +406,13 @@ def list_devices():
 @app.route("/devices/register", methods=["POST"])
 def register_device():
     """
-    Register a new device with IP address and port.
-    Body: {name: required, ip_address: optional, port: optional, device_type: optional}
+    DEVICE REGISTRATION: Adds a new consumer device to the database.
+    Inputs (JSON): name (req), ip_address (opt), port (opt), device_type (opt).
+    Functionality: Handles both simulator apps and real-world VAPID-based browsers.
     """
     data = request.get_json()
+
+    # 1. Basic JSON validation
 
     if not data:
         return jsonify({
@@ -437,7 +463,10 @@ def register_device():
 
 @app.route("/devices/<device_id>", methods=["DELETE"])
 def unregister_device(device_id):
-    """Remove a device by ID from the database."""
+    """
+    CLEANUP: Deletes a device from the database by its ID.
+    Used when a device is no longer active or uninstalls the app.
+    """
     device = db.session.get(Device, device_id)
 
     if not device:
@@ -469,9 +498,10 @@ def unregister_device(device_id):
 @app.route("/notifications/send", methods=["POST"])
 def send_notification():
     """
-    Generator/Producer endpoint — validates and enqueues a notification job.
-    Workers deliver to consumer devices at their registered IP:port.
-    Body: {title, message, device_ids (optional)}
+    PRODUCER ACTION: Accepts a notification request and pushes it to the worker queue.
+    Flow: 
+    1. Validate Input -> 2. Save to DB (Status: Queued) -> 3. Put into notification_queue
+    The endpoint returns immediately (202 Accepted) while workers handle delivery.
     """
     data = request.get_json()
 
@@ -571,7 +601,12 @@ def send_notification():
 
 @app.route("/notifications/status/<job_id>", methods=["GET"])
 def get_job_status(job_id):
-    """Check the processing status of a notification job."""
+    """
+    JOB TRACKING: Returns the current status of a specific notification job.
+    Possible statuses: 'queued', 'processing', 'completed'.
+    Includes detailed results per device if completed.
+    """
+    # Check in-memory tracker first (faster)
     if job_id in job_tracker:
         job = job_tracker[job_id]
         return jsonify({
@@ -610,7 +645,10 @@ def get_job_status(job_id):
 
 @app.route("/notifications/history", methods=["GET"])
 def get_notification_history():
-    """Get notification history from the database."""
+    """
+    HISTORY LIST: Returns the last 50 notification jobs sent.
+    Used to populate the 'Recent Logs' section in the Admin Dashboard.
+    """
     notifications = Notification.query.order_by(Notification.enqueued_at.desc()).limit(50).all()
 
     history = [{
