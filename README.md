@@ -1,153 +1,123 @@
-# 🔔 Notification Delivery API (Distributed Architecture)
+# 🔔 Push Notification System
 
-A professional, distributed notification system with a **Generator/Producer** API and **Consumer Device** applications communicating over HTTP.
+A distributed **Producer-Consumer** notification system built with **Flask** and **Python**.
+
+The **Producer** manages device registration, queues notifications, and delivers them to registered consumer devices. The **Consumer** receives notifications and displays them in a real-time dashboard.
 
 ---
 
-## 🏗️ System Architecture
+## Architecture
 
 ```
-┌──────────────────────────┐       HTTP POST        ┌─────────────────────────┐
-│    GENERATOR (Producer)  │  ──────────────────►    │   CONSUMER (Device)     │
-│    app_pure.py           │     /receive            │   consumer_app.py       │
-│    Port 5000             │                         │   Port 5001             │
-│                          │◄──────────────────      │                         │
-│    SQLite Database       │    Auto-registers       │   Displays received     │
-│    Worker Pool (5)       │    on startup           │   notifications         │
-│    VAPID Keys (.env)     │                         │                         │
-└──────────────────────────┘                         └─────────────────────────┘
+┌─────────────────────────────────────────────────┐
+│              PRODUCER (Port 5000)                │
+│                                                  │
+│  REST API → Queue → Worker Pool → HTTP Delivery  │
+│  SQLite DB │ VAPID Web Push │ Admin Dashboard    │
+└────────────────────┬────────────────────────────┘
+                     │  HTTP POST /receive
+                     ▼
+┌─────────────────────────────────────────────────┐
+│              CONSUMER (Port 5001)                │
+│                                                  │
+│  Receives notifications │ Live polling dashboard │
+│  OS-level browser notifications                  │
+└─────────────────────────────────────────────────┘
 ```
 
-1. **Generator (Producer):** `app_pure.py` — The core API on Port 5000. Accepts notification requests, stores devices in SQLite, and dispatches jobs via a worker pool.
-2. **Consumer (Device):** `consumer_app.py` — A separate app on Port 5001 (or any port). Auto-registers itself with the Generator. Receives and displays notifications.
-3. **Communication:** The Generator sends HTTP POST requests to each Consumer's `/receive` endpoint at their registered IP:port.
+## Project Structure
+
+```
+notification-system/
+├── producer.py            # Producer API server (port 5000)
+├── consumer.py            # Consumer device server (port 5001)
+├── templates/
+│   ├── producer.html      # Admin dashboard UI
+│   └── consumer.html      # Consumer dashboard UI
+├── requirements.txt       # Python dependencies
+├── .env                   # VAPID keys & database config
+├── .gitignore
+└── README.md
+```
 
 ---
 
-## ✨ Features
+## Getting Started
 
-- ✅ **Distributed Architecture** — Generator and Consumer are separate applications
-- ✅ **SQLite Database** — Persistent device storage (survives server restarts)
-- ✅ **Worker Pool** — 5 concurrent background workers for parallel delivery
-- ✅ **IP/Port Identification** — Each device is identified by its network address
-- ✅ **VAPID Keys in .env** — Secrets stored securely outside the code
-- ✅ **Auto-Registration** — Consumers register themselves on startup
-- ✅ **Job Tracking** — Track notification status (Queued → Processing → Completed)
-- ✅ **Visual Consumer Dashboard** — See received notifications in real-time
+### 1. Install Dependencies
 
----
-
-## 🚀 Getting Started
-
-### 1. Prerequisites
-- Python 3.8+
-- [Postman](https://www.postman.com/) (recommended for testing)
-
-### 2. Setup
 ```bash
-# Create and activate virtual environment
-python -m venv .venv
-.venv\Scripts\activate     # Windows
-source .venv/bin/activate  # Mac/Linux
-
-# Install all dependencies
 pip install -r requirements.txt
 ```
 
-### 3. Run the Generator (Terminal 1)
-```bash
-python app_pure.py
-```
-*Starts the Generator/Producer API on Port 5000. Initializes SQLite database and 5 worker threads.*
+### 2. Start the Producer
 
-### 4. Run a Consumer Device (Terminal 2)
 ```bash
-python consumer_app.py --port 5001 --name "Dashboard-App"
+python producer.py
 ```
-*Starts a Consumer Device on Port 5001. Auto-registers with the Generator.*
 
-### 5. Run More Consumer Devices (Terminal 3, etc.)
+The Producer starts on **http://localhost:5000** and provides:
+- Admin dashboard at `/`
+- REST API for device registration and notifications
+- Background worker pool for async delivery
+
+### 3. Start the Consumer
+
+In a **separate terminal**:
+
 ```bash
-python consumer_app.py --port 5002 --name "Mobile-Simulator"
-python consumer_app.py --port 5003 --name "Flipkart-App"
+python consumer.py
 ```
-*Each consumer runs on its own port, simulating different devices on the network.*
+
+The Consumer starts on **http://localhost:5001** and:
+- Auto-registers with the Producer on startup
+- Receives notifications via HTTP POST
+- Displays them in a real-time dashboard
+
+#### Consumer Options
+
+```bash
+python consumer.py --port 5002 --name "My-Device" --producer-port 5000
+```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--port` | 5001 | Port for this consumer |
+| `--name` | Consumer-Device-1 | Device display name |
+| `--producer-port` | 5000 | Producer API port |
 
 ---
 
-## 📡 API Reference (Generator — Port 5000)
+## API Endpoints (Producer)
 
-### System
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/api` | System info and all available endpoints |
-| GET | `/vapid/public-key` | VAPID public key for browser push |
-
-### Devices
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/devices` | List all registered devices (from database) |
-| POST | `/devices/register` | Register a device with name, IP, port, type |
-| DELETE | `/devices/<id>` | Unregister a device |
-
-### Notifications
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/notifications/send` | Enqueue a notification job |
-| GET | `/notifications/status/<job_id>` | Track job progress |
-| GET | `/notifications/history` | View notification history (from database) |
-
-### Consumer Device Endpoints (Port 5001+)
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/` | Visual dashboard showing received notifications |
-| POST | `/receive` | Endpoint called by Generator to deliver notifications |
-| GET | `/status` | Health check for the consumer device |
+| `GET` | `/` | Admin dashboard |
+| `GET` | `/api` | API info & endpoints |
+| `GET` | `/devices` | List registered devices |
+| `POST` | `/devices/register` | Register a device |
+| `DELETE` | `/devices/<id>` | Remove a device |
+| `POST` | `/notifications/send` | Send notification |
+| `GET` | `/notifications/status/<job_id>` | Check job status |
+| `GET` | `/notifications/history` | View notification history |
+| `GET` | `/vapid/public-key` | Get VAPID public key |
 
 ---
 
-## 🧪 Demo Flow
+## How It Works
 
-### Step 1: Start Generator
-```bash
-python app_pure.py
-```
-
-### Step 2: Start Consumer
-```bash
-python consumer_app.py --port 5001 --name "My-Dashboard"
-```
-
-### Step 3: Send Notification (via Postman or cURL)
-```bash
-curl -X POST http://localhost:5000/notifications/send \
-  -H "Content-Type: application/json" \
-  -d '{"title": "Hello!", "message": "This is a real notification!"}'
-```
-
-### Step 4: Check the Consumer Dashboard
-Open `http://localhost:5001` in your browser — you'll see the notification displayed!
+1. **Consumer** starts and auto-registers with the **Producer**
+2. Open the **Producer dashboard** (`http://localhost:5000`) to see registered devices
+3. Send a notification from the dashboard
+4. The Producer queues the job and worker threads deliver it to each consumer
+5. The **Consumer dashboard** (`http://localhost:5001`) shows received notifications in real-time
 
 ---
 
-## 🔒 Security
+## Tech Stack
 
-- **VAPID Keys:** Stored in `.env` file (not in code, not on GitHub)
-- **Database:** SQLite file (`notifications.db`) is gitignored
-- **CORS:** Configurable cross-origin access
-
----
-
-## 📦 Tech Stack
-
-| Category | Technology | Purpose |
-|----------|-----------|---------|
-| Framework | Flask | REST API server |
-| Database | SQLAlchemy + SQLite | Persistent device storage |
-| Security | Flask-CORS, Py-VAPID | Cross-origin + push signing |
-| Delivery | PyWebPush, Requests | Web push + HTTP delivery |
-| Architecture | Threading, Queue | Worker pool + async processing |
-| Config | python-dotenv | Environment variable management |
-
----
-*Developed for the Web Push Notification Internship — Distributed Generator/Consumer Architecture*
+- **Backend**: Python, Flask, Flask-SQLAlchemy
+- **Database**: SQLite
+- **Web Push**: pywebpush, py-vapid (VAPID protocol)
+- **Async**: Thread-based worker pool with queue
+- **Frontend**: Vanilla HTML/CSS/JS with live polling
