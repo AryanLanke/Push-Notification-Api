@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Producer Dashboard — Notification System</title>
+    <title>Admin Panel — Notification Generator</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap"
         rel="stylesheet" />
@@ -71,6 +71,33 @@
             display: flex;
             align-items: center;
             gap: 12px;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 6px;
+        }
+
+        .nav-link {
+            padding: 8px 18px;
+            border-radius: 8px;
+            font-size: 0.85rem;
+            font-weight: 500;
+            text-decoration: none;
+            color: var(--muted);
+            transition: all 0.2s;
+            border: 1px solid transparent;
+        }
+
+        .nav-link:hover {
+            color: var(--text);
+            background: var(--surface2);
+        }
+
+        .nav-link.active {
+            color: #fff;
+            background: rgba(124, 58, 237, 0.15);
+            border-color: rgba(124, 58, 237, 0.3);
         }
 
         .server-dot {
@@ -555,15 +582,20 @@
     <!-- NAV -->
     <nav>
         <div class="logo">
-            🔔 Notification Producer
+            🔔 Notification Generator
             <span class="logo-badge">ADMIN</span>
         </div>
         <div class="nav-right">
+            <div class="nav-links">
+                <a href="/" class="nav-link active">🛠 Admin Panel</a>
+                <a href="/register" class="nav-link">📡 Register Device</a>
+                <a href="/client" class="nav-link" style="color:var(--accent2); font-weight:700;">🌍 Global Consumer</a>
+            </div>
             <div class="server-status">
                 <span class="network-badge" id="netIp">Loading IP...</span>
                 <div style="display:flex; align-items:center; gap:8px;">
-                    <div class="server-dot"></div>
-                    Producer running on Port 5000
+                    <div class="dot"></div>
+                    Generator running on Port 5000
                 </div>
             </div>
         </div>
@@ -589,7 +621,7 @@
 
         <div class="grid">
 
-            <!-- LEFT: SEND + DEVICE LIST -->
+            <!-- ── LEFT: SEND + DEVICE LIST ── -->
             <div style="display:flex;flex-direction:column;gap:24px;">
 
                 <!-- SEND NOTIFICATION -->
@@ -605,6 +637,7 @@
                             <input type="checkbox" id="chk-all" checked onchange="toggleAll(this)" />
                             <label for="chk-all">📢 All Devices (Broadcast)</label>
                         </div>
+                        <!-- Device checkboxes added dynamically by JS -->
                     </div>
                     <button class="btn btn-primary" id="sendBtn" onclick="sendNotification()">
                         <span>🚀</span> Send Notification
@@ -630,9 +663,10 @@
 
             </div>
 
-            <!-- RIGHT: HISTORY -->
+            <!-- ── RIGHT: HISTORY ── -->
             <div style="display:flex;flex-direction:column;gap:24px;">
 
+                <!-- NOTIFICATION HISTORY (full height) -->
                 <div class="card" style="flex:1;">
                     <div class="card-title" style="justify-content:space-between;">
                         <span style="display:flex;align-items:center;gap:8px;"><span>📜</span> Notification
@@ -662,26 +696,29 @@
     </div>
 
     <script>
-        const API = window.location.origin;
+        const API = 'http://localhost:5000';
         const typeIcon = { web: '🌐', mobile: '📱', pager: '📟' };
 
         // ── TOGGLE ALL CHECKBOX ──
         function toggleAll(el) {
+            // When "All Devices" is checked, uncheck all individual device checkboxes
             if (el.checked) {
                 document.querySelectorAll('.device-chk').forEach(c => { c.checked = false; });
             }
         }
 
         function onDeviceCheckChange(chk) {
+            // If any individual device is checked, uncheck "All"
             if (chk.checked) {
                 document.getElementById('chk-all').checked = false;
             }
+            // If none are checked, revert to "All"
             const any = [...document.querySelectorAll('.device-chk')].some(c => c.checked);
             if (!any) document.getElementById('chk-all').checked = true;
         }
 
         function getSelectedDeviceIds() {
-            if (document.getElementById('chk-all').checked) return [];
+            if (document.getElementById('chk-all').checked) return []; // empty = all
             return [...document.querySelectorAll('.device-chk:checked')].map(c => c.value);
         }
 
@@ -689,13 +726,13 @@
         let lastDeviceJson = "";
         let lastHistoryJson = "";
 
-        // ── Get Network IP ──
+        // ── Get Network IP (provided by Flask context or hardcoded hint) ──
         async function loadIp() {
             try {
                 const r = await fetch(`${API}/api`);
                 const data = await r.json();
                 if (data.network_ip) {
-                    document.getElementById('netIp').textContent = `Network: http://${data.network_ip}:5000`;
+                    document.getElementById('netIp').textContent = `Shared IP: http://${data.network_ip}:5000`;
                 } else {
                     document.getElementById('netIp').textContent = "Local Only (localhost:5000)";
                 }
@@ -708,6 +745,7 @@
                 const r = await fetch(`${API}/devices`);
                 const data = await r.json();
 
+                // Compare JSON to previous state to decide if we should update DOM
                 const currentJson = JSON.stringify(data.devices);
                 if (currentJson === lastDeviceJson && isSilent) return;
                 lastDeviceJson = currentJson;
@@ -716,17 +754,19 @@
                 const list = document.getElementById('deviceList');
                 const checkList = document.getElementById('deviceCheckList');
 
+                // Clear old device checkboxes (keep the "All" row which is first child)
                 checkList.querySelectorAll('.device-chk-row').forEach(el => el.remove());
 
                 if (!data.devices || data.devices.length === 0) {
                     list.innerHTML = `<div class="empty"><div class="empty-icon">📭</div>
           <p>No devices registered yet.</p>
           <p style="font-size:0.8rem;margin-top:6px;">
-            Run <code>python consumer.py</code> to register a consumer device.
+            <a href="/register" style="color:var(--accent2);">Register a device →</a>
           </p></div>`;
                     return;
                 }
 
+                // Rebuild device checkboxes (silent rebuild)
                 data.devices.forEach(d => {
                     const div = document.createElement('div');
                     div.className = 'device-check-item device-chk-row';
@@ -757,7 +797,7 @@
             } catch (e) {
                 if (!isSilent) {
                     document.getElementById('deviceList').innerHTML =
-                        '<div class="empty"><div class="empty-icon">⚠️</div><p>Cannot reach Producer API.<br>Is producer.py running?</p></div>';
+                        '<div class="empty"><div class="empty-icon">⚠️</div><p>Cannot reach Generator API.<br>Is app_pure.py running?</p></div>';
                 }
             }
         }
@@ -775,7 +815,7 @@
         async function sendNotification() {
             const title = document.getElementById('notifTitle').value.trim();
             const message = document.getElementById('notifMessage').value.trim();
-            const selected = getSelectedDeviceIds();
+            const selected = getSelectedDeviceIds(); // [] = all, [id,...] = specific
             const statusEl = document.getElementById('sendStatus');
 
             if (!title) { statusEl.innerHTML = '<span style="color:var(--danger)">⚠ Title is required.</span>'; return; }
@@ -804,7 +844,7 @@
                     statusEl.innerHTML = `<span style="color:var(--danger)">❌ ${data.error}</span>`;
                 }
             } catch (e) {
-                statusEl.innerHTML = '<span style="color:var(--danger)">❌ Cannot connect to Producer API.</span>';
+                statusEl.innerHTML = '<span style="color:var(--danger)">❌ Cannot connect to Generator API.</span>';
             }
             btn.disabled = false; btn.innerHTML = '<span>🚀</span> Send Notification';
         }
@@ -861,6 +901,7 @@
 
                 list.innerHTML = data.notifications.map(n => {
                     const cls = n.failed === 0 ? 'success' : n.successful > 0 ? 'partial' : '';
+                    // Format: "Mon, 11:34 AM"
                     const timeStr = n.enqueued_at ? new Intl.DateTimeFormat('en-US', dateOptions).format(new Date(n.enqueued_at + 'Z')) : '—';
 
                     return `
@@ -887,6 +928,7 @@
         loadIp();
         loadDevices();
         loadHistory();
+        // Auto-refresh every 5s silently (no flickering)
         setInterval(() => { loadDevices(true); loadHistory(true); }, 5000);
     </script>
 </body>

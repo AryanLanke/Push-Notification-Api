@@ -1,22 +1,19 @@
 """
-Producer — Notification Delivery API
+Notification Delivery API - Generator/Producer
 
 Flask REST API with queue-based notification delivery.
-Manages device registration, notification broadcasting, and history.
+JSON-only backend — no frontend dependencies.
 
 Architecture:
-    Producer:  API endpoint enqueues notification jobs.
-    Consumer:  Separate application(s) on different port(s) that
-               receive and display notifications.
-    Broker:    Thread-safe queue bridges producer and worker pool.
-    Routing:   Device-type routing (web, mobile, pager).
+    Generator/Producer: API endpoint enqueues notification jobs.
+    Consumer:           Separate application(s) on different port(s) that
+                        receive and display notifications.
+    Broker:             Thread-safe queue bridges producer and worker pool.
+    Routing:            Device-type routing (web, mobile, pager).
 
 Persistence:
     SQLite database via SQLAlchemy for device storage.
     VAPID keys loaded from .env file.
-
-Usage:
-    python producer.py      # Runs on port 5000
 """
 
 from flask import Flask, request, jsonify, render_template
@@ -33,7 +30,6 @@ import time
 from datetime import datetime
 from pywebpush import webpush, WebPushException
 
-
 def get_network_ip():
     """Get the local network IP address of this machine."""
     try:
@@ -44,7 +40,6 @@ def get_network_ip():
         return ip
     except Exception:
         return "127.0.0.1"
-
 
 # Load environment variables from .env
 load_dotenv()
@@ -82,20 +77,19 @@ VAPID_CLAIMS = {"sub": os.getenv("VAPID_CLAIMS_EMAIL", "mailto:admin@example.com
 
 VALID_DEVICE_TYPES = ["web", "mobile", "pager"]
 
-
 def send_web_push(device_dict, title, message):
     """
     Send notification to a web consumer.
     Checks if it's a 'Simulation' (IP/Port) or a 'Real Browser' (VAPID).
     """
     sub_json = device_dict.get('subscription_data')
-
+    
     if sub_json:
-        # Real web push via VAPID
+        # 🔗 REAL WEB PUSH (VAPID)
         try:
             subscription = json.loads(sub_json)
             payload = json.dumps({"title": title, "body": message})
-
+            
             webpush(
                 subscription_info=subscription,
                 data=payload,
@@ -116,17 +110,17 @@ def send_web_push(device_dict, title, message):
             return {"device_id": device_dict["id"], "device_name": device_dict["name"],
                     "device_type": "web", "status": "failed",
                     "message": f"System Error: {str(e)}"}
-
+            
     else:
-        # Simulation mode — deliver via local HTTP POST
+        # 🔄 SIMULATION (Local HTTP)
         address = f"http://{device_dict['ip_address']}:{device_dict['port']}/receive"
         try:
-            payload = {"title": title, "message": message, "from": "Producer API"}
+            payload = {"title": title, "message": message, "from": "Generator API"}
             response = requests.post(address, json=payload, timeout=5)
             if response.status_code == 200:
                 return {"device_id": device_dict["id"], "device_name": device_dict["name"],
                         "device_type": "web", "status": "success",
-                        "message": "Delivered to consumer server"}
+                        "message": "Delivered to simulation server"}
             return {"device_id": device_dict["id"], "device_name": device_dict["name"],
                     "device_type": "web", "status": "failed",
                     "message": f"Consumer error: {response.status_code}"}
@@ -134,7 +128,6 @@ def send_web_push(device_dict, title, message):
             return {"device_id": device_dict["id"], "device_name": device_dict["name"],
                     "device_type": "web", "status": "failed",
                     "message": f"Connection failed: {str(e)}"}
-
 
 # ============================================================================
 # DATABASE MODELS
@@ -200,6 +193,8 @@ job_tracker = {}
 # NOTIFICATION HANDLERS (per device type)
 # ============================================================================
 
+# Handled globally by the dual-mode send_web_push implementation
+
 
 def send_mobile_push(device_dict, title, message):
     """Send mobile push notification. Replace with FCM/APNs integration."""
@@ -227,7 +222,7 @@ DEVICE_HANDLERS = {
 }
 
 # ============================================================================
-# BACKGROUND WORKER POOL
+# CONSUMER — Background worker pool
 # ============================================================================
 WORKER_POOL_SIZE = 5
 
@@ -293,7 +288,7 @@ def notification_worker(worker_id):
         notification_queue.task_done()
 
 
-# Start worker pool
+# Start worker pool (5 consumer threads)
 for i in range(WORKER_POOL_SIZE):
     t = threading.Thread(target=notification_worker, args=(i + 1,), daemon=True)
     t.start()
@@ -303,19 +298,63 @@ print(f"✓ Worker pool started ({WORKER_POOL_SIZE} workers)")
 # API ENDPOINTS
 # ============================================================================
 
+# ----------------------------------------------------------------------------
+# PAGE ROUTES (HTML Templates)
+# ----------------------------------------------------------------------------
+
 @app.route("/", methods=["GET"])
 def admin_dashboard():
-    """Serve the Producer admin dashboard."""
-    return render_template("producer.html")
+    """
+    Serve the main Admin Dashboard interface.
+    Used for monitoring devices, sending broadcasts, and viewing history.
+    """
+    return render_template("admin.html")
 
+
+@app.route("/register", methods=["GET"])
+def register_page():
+    """
+    Serve the standalone Device Registration page.
+    This page allows new consumer devices to manually register with the server.
+    """
+    return render_template("register.html")
+
+
+@app.route("/client", methods=["GET"])
+def client_page():
+    """
+    Serve the Real-World Consumer endpoint page.
+    Used by browser-based clients (phones/laptops) to subscribe via VAPID.
+    """
+    return render_template("client.html")
+
+
+@app.route("/vapid-public-key", methods=["GET"])
+def public_key():
+    """Return the VAPID public key for browser subscription."""
+    return jsonify({"public_key": VAPID_PUBLIC_KEY})
+
+
+@app.route("/sw.js")
+def service_worker():
+    """Serve the Service Worker script from the static folder."""
+    return app.send_static_file("sw.js")
+
+
+# ----------------------------------------------------------------------------
+# SYSTEM API ENDPOINTS
+# ----------------------------------------------------------------------------
 
 @app.route("/api", methods=["GET"])
 def api_info():
-    """Discovery endpoint: returns system info and available API routes."""
+    """
+    Discovery Endpoint: Returns system information, architecture details,
+    and a list of all available REST API endpoints.
+    """
     return jsonify({
-        "message": "Notification Delivery API — Producer",
+        "message": "Notification Delivery API — Generator/Producer",
         "version": "3.0.0",
-        "architecture": "Distributed Producer-Consumer with SQLite persistence",
+        "architecture": "Distributed Generator-Consumer with SQLite persistence",
         "device_types": VALID_DEVICE_TYPES,
         "persistence": "SQLite database",
         "worker_pool": WORKER_POOL_SIZE,
@@ -349,7 +388,10 @@ def get_vapid_key():
 
 @app.route("/devices", methods=["GET"])
 def list_devices():
-    """List all registered devices from the database."""
+    """
+    DATA RETRIEVAL: Fetches and returns a list of all devices stored in SQLite.
+    Returns: JSON list of objects with ID, Name, IP, Port, and Registration Time.
+    """
     devices = Device.query.all()
     devices_list = [d.to_dict() for d in devices]
 
@@ -364,10 +406,13 @@ def list_devices():
 @app.route("/devices/register", methods=["POST"])
 def register_device():
     """
-    Register a new consumer device.
-    Body: {name (required), ip_address, port, device_type, email}
+    DEVICE REGISTRATION: Adds a new consumer device to the database.
+    Inputs (JSON): name (req), ip_address (opt), port (opt), device_type (opt).
+    Functionality: Handles both simulator apps and real-world VAPID-based browsers.
     """
     data = request.get_json()
+
+    # 1. Basic JSON validation
 
     if not data:
         return jsonify({
@@ -418,7 +463,10 @@ def register_device():
 
 @app.route("/devices/<device_id>", methods=["DELETE"])
 def unregister_device(device_id):
-    """Remove a device from the database by its ID."""
+    """
+    CLEANUP: Deletes a device from the database by its ID.
+    Used when a device is no longer active or uninstalls the app.
+    """
     device = db.session.get(Device, device_id)
 
     if not device:
@@ -444,15 +492,16 @@ def unregister_device(device_id):
 
 
 # ============================================================================
-# NOTIFICATION ENDPOINTS
+# NOTIFICATION ENDPOINTS (GENERATOR/PRODUCER)
 # ============================================================================
 
 @app.route("/notifications/send", methods=["POST"])
 def send_notification():
     """
-    Accept a notification request and push it to the worker queue.
-    Returns immediately (202 Accepted) while workers handle delivery.
-    Body: {title (required), message (required), device_ids (optional)}
+    PRODUCER ACTION: Accepts a notification request and pushes it to the worker queue.
+    Flow: 
+    1. Validate Input -> 2. Save to DB (Status: Queued) -> 3. Put into notification_queue
+    The endpoint returns immediately (202 Accepted) while workers handle delivery.
     """
     data = request.get_json()
 
@@ -517,7 +566,7 @@ def send_notification():
         "port": d.port
     } for d in target_devices]
 
-    # Enqueue the job
+    # Create job and enqueue (GENERATOR/PRODUCER action)
     job = {
         "job_id": job_id,
         "title": title,
@@ -536,8 +585,8 @@ def send_notification():
     notification_queue.put(job)
 
     target_addresses = [f"http://{d['ip_address']}:{d['port']}" for d in device_dicts]
-    print(f"[PRODUCER] Enqueued job {job_id}: '{title}' → {len(device_dicts)} device(s)")
-    print(f"[PRODUCER] Targets: {target_addresses}")
+    print(f"[GENERATOR] Enqueued job {job_id}: '{title}' → {len(device_dicts)} device(s)")
+    print(f"[GENERATOR] Targets: {target_addresses}")
 
     return jsonify({
         "success": True,
@@ -553,8 +602,9 @@ def send_notification():
 @app.route("/notifications/status/<job_id>", methods=["GET"])
 def get_job_status(job_id):
     """
-    Return the current status of a notification job.
+    JOB TRACKING: Returns the current status of a specific notification job.
     Possible statuses: 'queued', 'processing', 'completed'.
+    Includes detailed results per device if completed.
     """
     # Check in-memory tracker first (faster)
     if job_id in job_tracker:
@@ -595,7 +645,10 @@ def get_job_status(job_id):
 
 @app.route("/notifications/history", methods=["GET"])
 def get_notification_history():
-    """Return the last 50 notification jobs sent."""
+    """
+    HISTORY LIST: Returns the last 50 notification jobs sent.
+    Used to populate the 'Recent Logs' section in the Admin Dashboard.
+    """
     notifications = Notification.query.order_by(Notification.enqueued_at.desc()).limit(50).all()
 
     history = [{
@@ -641,18 +694,29 @@ def internal_error(error):
 # RUN THE SERVER
 # ============================================================================
 
+def get_local_ip():
+    import socket
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        local_ip = s.getsockname()[0]
+        s.close()
+        return local_ip
+    except Exception:
+        return "127.0.0.1"
+
 if __name__ == "__main__":
     if os.environ.get("WERKZEUG_RUN_MAIN") != "true":
-        local_ip = get_network_ip()
+        local_ip = get_local_ip()
         print("=" * 60)
-        print("NOTIFICATION API — Producer")
+        print("NOTIFICATION API v3 — Generator/Producer")
         print("=" * 60)
         print(f"  Local:   http://localhost:5000")
         print(f"  Network: http://{local_ip}:5000")
         print(f"  API:     http://localhost:5000/api")
         print("")
         print("Architecture:")
-        print("  Producer → Queue → Workers → Consumer Devices")
+        print("  Generator → Queue → Workers → Consumer Devices")
         print(f"  Worker Pool: {WORKER_POOL_SIZE} threads")
         print("  Database: SQLite (notifications.db)")
         print("")
