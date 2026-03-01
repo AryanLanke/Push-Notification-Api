@@ -592,6 +592,34 @@
             <!-- LEFT: SEND + DEVICE LIST -->
             <div style="display:flex;flex-direction:column;gap:24px;">
 
+                <!-- REGISTER DEVICE -->
+                <div class="card">
+                    <div class="card-title"><span>📲</span> Register Device</div>
+                    <label>Device Name</label>
+                    <input id="regName" type="text" placeholder="e.g. Aryan's Phone" />
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                        <div>
+                            <label>Device Type</label>
+                            <select id="regType">
+                                <option value="web">🌐 Web</option>
+                                <option value="mobile">📱 Mobile</option>
+                                <option value="pager">📟 Pager</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label>Port</label>
+                            <input id="regPort" type="number" value="5001" />
+                        </div>
+                    </div>
+                    <label>IP Address</label>
+                    <input id="regIp" type="text" value="127.0.0.1" />
+                    <button class="btn btn-primary" id="regBtn" onclick="registerDevice()"
+                        style="background:linear-gradient(135deg, #06b6d4, #0891b2);box-shadow:0 4px 20px rgba(6,182,212,0.35);">
+                        <span>📲</span> Register Device
+                    </button>
+                    <div id="regStatus" style="margin-top:12px;font-size:0.82rem;"></div>
+                </div>
+
                 <!-- SEND NOTIFICATION -->
                 <div class="card">
                     <div class="card-title"><span>🚀</span> Send Notification</div>
@@ -881,6 +909,38 @@
                         '<div class="empty"><div class="empty-icon">⚠️</div><p>Could not load history.</p></div>';
                 }
             }
+        }
+
+        // ── REGISTER DEVICE ──
+        async function registerDevice() {
+            const name = document.getElementById('regName').value.trim();
+            const type = document.getElementById('regType').value;
+            const ip = document.getElementById('regIp').value.trim();
+            const port = document.getElementById('regPort').value;
+            const statusEl = document.getElementById('regStatus');
+
+            if (!name) { statusEl.innerHTML = '<span style="color:var(--danger)">⚠ Device name is required.</span>'; return; }
+
+            const btn = document.getElementById('regBtn');
+            btn.disabled = true; btn.innerHTML = '<span>⏳</span> Registering...';
+
+            try {
+                const r = await fetch(`${API}/devices/register`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, device_type: type, ip_address: ip, port: parseInt(port) })
+                });
+                const data = await r.json();
+                if (data.success) {
+                    statusEl.innerHTML = `<span style="color:var(--success)">✅ Registered: ${data.device.name} (${type})</span>`;
+                    document.getElementById('regName').value = '';
+                    loadDevices();
+                } else {
+                    statusEl.innerHTML = `<span style="color:var(--danger)">❌ ${data.error}</span>`;
+                }
+            } catch (e) {
+                statusEl.innerHTML = '<span style="color:var(--danger)">❌ Cannot connect to Producer API.</span>';
+            }
+            btn.disabled = false; btn.innerHTML = '<span>📲</span> Register Device';
         }
 
         // ── INIT ──

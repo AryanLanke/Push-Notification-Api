@@ -20,12 +20,12 @@ Usage:
 """
 
 from flask import Flask, request, jsonify, render_template
-from flask_sqlalchemy import SQLAlchemy
-from dotenv import load_dotenv
+from flask_sqlalchemy import SQLAlchemy #Connects Flask to databases using ORM (Object-Relational Mapping) 
+from dotenv import load_dotenv #Loads variables from .env file into environment
 import os
 import socket
 import json
-import requests
+import requests #Makes HTTP requests from Python (like a browser, but in code)
 import queue
 import threading
 import uuid
