@@ -658,9 +658,26 @@
 
             </div>
 
-            <!-- RIGHT: HISTORY -->
+            <!-- RIGHT: QUEUE & HISTORY -->
             <div style="display:flex;flex-direction:column;gap:24px;">
 
+                <!-- QUEUED JOBS -->
+                <div class="card">
+                    <div class="card-title" style="justify-content:space-between;">
+                        <span style="display:flex;align-items:center;gap:8px;"><span>⏳</span> Queued Jobs</span>
+                        <button onclick="loadQueue()"
+                            style="background:none;border:none;color:var(--accent2);cursor:pointer;font-size:0.8rem;">↻
+                            Refresh</button>
+                    </div>
+                    <div class="history-list" id="queueList">
+                        <div class="empty">
+                            <div class="empty-icon">✓</div>
+                            <p>Queue is empty</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- NOTIFICATION HISTORY -->
                 <div class="card" style="flex:1;">
                     <div class="card-title" style="justify-content:space-between;">
                         <span style="display:flex;align-items:center;gap:8px;"><span>📜</span> Notification
@@ -716,6 +733,7 @@
         // ── Track state to prevent flickering ──
         let lastDeviceJson = "";
         let lastHistoryJson = "";
+        let lastQueueJson = "";
 
         // ── Get Network IP ──
         async function loadIp() {
@@ -827,6 +845,7 @@
                     document.getElementById('notifTitle').value = '';
                     document.getElementById('notifMessage').value = '';
                     trackJob(data.job_id);
+                    loadQueue();
                     setTimeout(loadHistory, 2000);
                 } else {
                     statusEl.innerHTML = `<span style="color:var(--danger)">❌ ${data.error}</span>`;
@@ -858,12 +877,53 @@
                     if (data.status === 'completed') {
                         el.textContent = `✅ DONE — ${data.successful} delivered, ${data.failed} failed`;
                         el.className = 'toast-status s-completed';
-                        loadHistory(); loadDevices(); return;
+                        loadHistory(); loadDevices(); loadQueue(); return;
                     } else if (data.status === 'processing') {
                         el.textContent = '⚙ PROCESSING...';
                         el.className = 'toast-status s-processing';
                     }
                 } catch (e) { break; }
+            }
+        }
+
+        // ── LOAD QUEUE ──
+        async function loadQueue(isSilent = false) {
+            try {
+                const r = await fetch(`${API}/notifications/queue`);
+                const data = await r.json();
+
+                const currentJson = JSON.stringify(data.queue);
+                if (currentJson === lastQueueJson && isSilent) return;
+                lastQueueJson = currentJson;
+
+                const list = document.getElementById('queueList');
+
+                if (!data.queue || data.queue.length === 0) {
+                    list.innerHTML = '<div class="empty"><div class="empty-icon">✓</div><p>Queue is empty</p></div>';
+                    return;
+                }
+
+                const dateOptions = { weekday: 'short', hour: 'numeric', minute: 'numeric', second: 'numeric', hour12: true };
+
+                list.innerHTML = data.queue.map(q => {
+                    const timeStr = q.enqueued_at ? new Intl.DateTimeFormat('en-US', dateOptions).format(new Date(q.enqueued_at + 'Z')) : '—';
+                    const icon = q.status === 'processing' ? '⚙' : '⏳';
+                    const style = q.status === 'processing' ? 'color:var(--warn);' : 'color:var(--accent);';
+
+                    return `
+        <div class="history-item">
+          <div class="history-title" style="${style}">${icon} ${q.title}</div>
+          <div class="history-meta" style="margin-top: 4px;">
+            <span class="hm-time">Waiting to send to ${q.total_devices} devices</span>
+            <span class="hm-time">${timeStr}</span>
+          </div>
+        </div>`;
+                }).join('');
+            } catch (e) {
+                if (!isSilent) {
+                    document.getElementById('queueList').innerHTML =
+                        '<div class="empty"><div class="empty-icon">⚠️</div><p>Could not load queue.</p></div>';
+                }
             }
         }
 
@@ -946,8 +1006,9 @@
         // ── INIT ──
         loadIp();
         loadDevices();
+        loadQueue();
         loadHistory();
-        setInterval(() => { loadDevices(true); loadHistory(true); }, 5000);
+        setInterval(() => { loadDevices(true); loadHistory(true); loadQueue(true); }, 5000);
     </script>
 </body>
 

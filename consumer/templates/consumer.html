@@ -256,8 +256,8 @@
     </div>
 
     <button class="refresh-btn" onclick="location.reload()">🔄 Refresh</button>
-    <span class="live-badge">
-        <div class="live-dot"></div> Live — updates every 2s
+    <span class="live-badge" id="liveBadge">
+        <div class="live-dot"></div> Live — SSE connected
     </span>
 
     <h2 style="margin-bottom: 15px;">📬 Received Notifications</h2>
@@ -284,13 +284,48 @@
     <script>
         let seenCount = {{ count }};
 
-        // Check permission on page load
+        // ================================================================
+        // SSE — Server-Sent Events (replaces the old 2-second polling)
+        //
+        // How it works:
+        //   1. The browser opens ONE long-lived connection to /events.
+        //   2. The server keeps this connection open.
+        //   3. When a notification arrives at /receive, the server
+        //      immediately pushes it down this connection.
+        //   4. No wasted requests, no 2-second delay.
+        // ================================================================
+
+        function connectSSE() {
+            const evtSource = new EventSource('/events');
+            const badge = document.getElementById('liveBadge');
+
+            evtSource.onopen = () => {
+                console.log('[SSE] Connected to /events');
+                badge.innerHTML = '<div class="live-dot"></div> Live — SSE connected';
+            };
+
+            evtSource.onmessage = (event) => {
+                // Each event.data is one JSON notification object
+                const n = JSON.parse(event.data);
+                prependCard(n);
+                showSystemNotification(n.title, n.message);
+                seenCount++;
+                document.getElementById('count').textContent = seenCount;
+            };
+
+            evtSource.onerror = () => {
+                console.warn('[SSE] Connection lost, reconnecting...');
+                badge.innerHTML = '<div class="live-dot" style="background:#ff5252;"></div> Reconnecting...';
+                // EventSource auto-reconnects, so we just update the badge
+            };
+        }
+
+        // Check permission on page load, then start SSE
         window.addEventListener('load', () => {
             if ('Notification' in window && Notification.permission === 'default') {
                 document.getElementById('permBanner').style.display = 'flex';
             }
-            poll();
-            setInterval(poll, 2000);
+            connectSSE();
         });
 
         // Request OS notification permission
@@ -326,23 +361,6 @@
 
         function esc(s) {
             return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-        }
-
-        // Poll /poll for new notifications every 2s
-        async function poll() {
-            try {
-                const res = await fetch('/poll?since=' + seenCount);
-                if (!res.ok) return;
-                const data = await res.json();
-                if (data.new_notifications && data.new_notifications.length > 0) {
-                    data.new_notifications.forEach(n => {
-                        prependCard(n);
-                        showSystemNotification(n.title, n.message);
-                    });
-                    seenCount = data.total;
-                    document.getElementById('count').textContent = seenCount;
-                }
-            } catch (e) { /* server may be restarting */ }
         }
     </script>
 </body>

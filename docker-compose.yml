@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  producer:
+    build: ./producer
+    ports:
+      - "5000:5000"
+    environment:
+      - FLASK_ENV=development
+
+  consumer:
+    build: ./consumer
+    ports:
+      - "5001:5001"
+    environment:
+      - FLASK_ENV=development

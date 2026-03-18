@@ -6,6 +6,8 @@ Runs on its own port (default: 5001) and receives notifications
 from the Producer API (Port 5000).
 
 On startup, it auto-registers itself with the Producer API.
+Uses Server-Sent Events (SSE) to push notifications to the
+browser instantly instead of polling every 2 seconds.
 
 Usage:
     python consumer.py                     # Runs on port 5001
@@ -13,20 +15,28 @@ Usage:
     python consumer.py --name "Device2"    # Custom device name
 """
 
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, request, jsonify, render_template, Response
 import requests
 import argparse
+import json
+import threading
 from datetime import datetime
 
 app = Flask(__name__)
 
-# Store received notifications in memory
+# Store received notifications in memory (just a simple Python list)
 received_notifications = []
+
+# SSE: threading.Event is like a "Bell" in a restaurant kitchen.
+# When a new notification arrives, we "ring the bell" (`sse_event.set()`).
+# This wakes up the browser's connection so it can fetch the new data instantly.
+sse_event = threading.Event()
 
 
 # ============================================================================
 # CONSUMER ENDPOINTS
 # ============================================================================
+
 
 @app.route("/", methods=["GET"])
 def home():
@@ -38,7 +48,7 @@ def home():
         port=app.config["PORT"],
         producer_port=app.config["PRODUCER_PORT"],
         notifications=received_notifications,
-        count=len(received_notifications)
+        count=len(received_notifications),
     )
 
 
@@ -46,8 +56,9 @@ def home():
 def receive_notification():
     """
     Endpoint called by the Producer to deliver a notification.
-    Stores in memory. Browser page polls /poll to pick it up and show
-    a real OS-level system notification popup.
+    1. It saves the message to our list.
+    2. It "rings the bell" to tell the browser "Hey, new data is here!"
+    (This is much faster than polling the server every 5 seconds).
     """
     data = request.get_json()
 
@@ -58,72 +69,108 @@ def receive_notification():
         "title": data.get("title", "No Title"),
         "message": data.get("message", "No Message"),
         "from": data.get("from", "Unknown"),
-        "received_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        "received_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
     }
 
     received_notifications.append(notification)
 
+    # Wake up all SSE listener threads so the browser gets the update instantly
+    # .set() rings the bell. .clear() resets the bell for the next time.
+    sse_event.set()
+    sse_event.clear()
+
     print(f"\n{'='*50}")
-    print(f"📬 NOTIFICATION RECEIVED!")
+    print("📬 NOTIFICATION RECEIVED!")
     print(f"   Title:   {notification['title']}")
     print(f"   Message: {notification['message']}")
     print(f"   From:    {notification['from']}")
     print(f"   Time:    {notification['received_at']}")
     print(f"{'='*50}\n")
 
-    return jsonify({
-        "success": True,
-        "message": "Notification received and stored",
-        "total_received": len(received_notifications)
-    }), 200
+    return (
+        jsonify(
+            {
+                "success": True,
+                "message": "Notification received and stored",
+                "total_received": len(received_notifications),
+            }
+        ),
+        200,
+    )
 
 
-@app.route("/poll", methods=["GET"])
-def poll():
+@app.route("/events")
+def sse_stream():
     """
-    Lightweight polling endpoint for the browser page.
-    Returns only NEW notifications since the last known count.
-    Called every 2 seconds by the browser — triggers system notification popup.
+    Server-Sent Events (SSE) endpoint.
+    Instead of the browser constantly asking "Are there new messages?",
+    the browser opens ONE connection here and leaves it open.
+    When a message arrives at /receive, this function pushes it to the browser.
     """
-    try:
-        since = int(request.args.get("since", 0))
-    except ValueError:
-        since = 0
 
-    new_notifications = received_notifications[since:]
-    return jsonify({
-        "total": len(received_notifications),
-        "new_count": len(new_notifications),
-        "new_notifications": new_notifications
-    }), 200
+    def event_stream():
+        last_seen = len(received_notifications)
+        while True:
+            # Block until /receive signals a new notification (or timeout for keep-alive)
+            sse_event.wait(timeout=30)
+            current_count = len(received_notifications)
+
+            if current_count > last_seen:
+                new_items = received_notifications[last_seen:]
+                for item in new_items:
+                    yield f"data: {json.dumps(item)}\n\n"
+                last_seen = current_count
+            else:
+                # Send a keep-alive comment so the connection doesn't drop
+                yield ": keep-alive\n\n"
+
+    return Response(
+        event_stream(),
+        mimetype="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        },
+    )
 
 
 @app.route("/status", methods=["GET"])
 def status():
     """Health check endpoint for the consumer device."""
-    return jsonify({
-        "success": True,
-        "device_name": app.config["DEVICE_NAME"],
-        "device_id": app.config.get("DEVICE_ID", "not-registered"),
-        "port": app.config["PORT"],
-        "notifications_received": len(received_notifications),
-        "status": "online"
-    }), 200
+    return (
+        jsonify(
+            {
+                "success": True,
+                "device_name": app.config["DEVICE_NAME"],
+                "device_id": app.config.get("DEVICE_ID", "not-registered"),
+                "port": app.config["PORT"],
+                "notifications_received": len(received_notifications),
+                "status": "online",
+            }
+        ),
+        200,
+    )
 
 
 # ============================================================================
 # REGISTER WITH PRODUCER ON STARTUP
 # ============================================================================
 
+
 def register_with_producer(name, port, producer_port):
-    """Auto-register this consumer device with the Producer API."""
+    """
+    Auto-register this consumer device with the Producer API.
+    When you start this script, it automatically sends a POST request
+    to the Producer saying "Hi, I'm here, here is my IP and Port!"
+    """
     producer_url = f"http://127.0.0.1:{producer_port}/devices/register"
     payload = {
         "name": name,
         "device_type": "web",
         "ip_address": "127.0.0.1",
         "port": port,
-        "email": ""
+        "email": "",
     }
     try:
         response = requests.post(producer_url, json=payload, timeout=5)
@@ -140,7 +187,7 @@ def register_with_producer(name, port, producer_port):
             return None
     except requests.exceptions.ConnectionError:
         print(f"⚠ Could not reach Producer at Port {producer_port}")
-        print(f"  Make sure producer.py is running first!")
+        print("  Make sure producer.py is running first!")
         return None
 
 
@@ -149,10 +196,27 @@ def register_with_producer(name, port, producer_port):
 # ============================================================================
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Consumer Device — Notification Receiver")
-    parser.add_argument("--port", type=int, default=5001, help="Port for this consumer (default: 5001)")
-    parser.add_argument("--name", type=str, default="Consumer-Device-1", help="Name of this device")
-    parser.add_argument("--producer-port", type=int, default=5000, help="Producer port (default: 5000)")
+    parser = argparse.ArgumentParser(
+        description="Consumer Device — Notification Receiver"
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=5001,
+        help="Port for this consumer (default: 5001)",
+    )
+    parser.add_argument(
+        "--name",
+        type=str,
+        default="Consumer-Device-1",
+        help="Name of this device",
+    )
+    parser.add_argument(
+        "--producer-port",
+        type=int,
+        default=5000,
+        help="Producer port (default: 5000)",
+    )
     args = parser.parse_args()
 
     app.config["DEVICE_NAME"] = args.name
