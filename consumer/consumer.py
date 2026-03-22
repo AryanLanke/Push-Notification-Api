@@ -65,6 +65,10 @@ def receive_notification():
     if not data:
         return jsonify({"success": False, "error": "No data received"}), 400
 
+    # Reject payloads missing required fields
+    if not data.get("title") or not data.get("message"):
+        return jsonify({"success": False, "error": "Missing required fields: 'title' and 'message'"}), 400
+
     notification = {
         "title": data.get("title", "No Title"),
         "message": data.get("message", "No Message"),
@@ -182,6 +186,9 @@ def register_with_producer(name, port, producer_port):
             print(f"  Device ID: {device_id}")
             print(f"  Address:   http://127.0.0.1:{port}")
             return device_id
+        elif response.status_code == 409:
+            print(f"✓ Already registered with Producer at Port {producer_port}")
+            return "already-registered"
         else:
             print(f"⚠ Registration failed: {response.text}")
             return None

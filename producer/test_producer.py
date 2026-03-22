@@ -102,3 +102,31 @@ def test_send_no_devices(client):
     data = json.loads(response.data)
     assert data["success"] is False
     assert "No devices registered" in data["error"]
+
+
+def test_duplicate_registration(client):
+    """Test that registering the same IP+Port twice returns 409"""
+    payload = {
+        "name": "Device A",
+        "device_type": "web",
+        "ip_address": "127.0.0.1",
+        "port": 5002,
+    }
+    # First registration should succeed
+    response = client.post(
+        "/devices/register",
+        data=json.dumps(payload),
+        content_type="application/json",
+    )
+    assert response.status_code == 201
+
+    # Second registration with same IP+Port should fail
+    response = client.post(
+        "/devices/register",
+        data=json.dumps({"name": "Device B", "ip_address": "127.0.0.1", "port": 5002}),
+        content_type="application/json",
+    )
+    assert response.status_code == 409
+    data = json.loads(response.data)
+    assert data["success"] is False
+    assert "already registered" in data["error"]

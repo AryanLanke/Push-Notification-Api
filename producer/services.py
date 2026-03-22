@@ -29,6 +29,10 @@ notification_queue = queue.Queue()
 # without having to query the database every single second.
 job_tracker = {}
 
+# SIGNAL: Used to tell the Producer Dashboard (via SSE) that something has changed.
+# This replaces the need for the browser to poll every 5 seconds.
+dashboard_event = threading.Event()
+
 
 def send_web_push(device_dict, title, message):
     """
@@ -115,6 +119,38 @@ def send_web_push(device_dict, title, message):
 
 
 def send_mobile_push(device_dict, title, message):
+    fcm_token = device_dict.get("subscription_data")
+
+    # If the company provides a real FCM Token and has configured their Google Firebase Account:
+    if fcm_token and os.getenv("FIREBASE_CREDENTIALS_FILE"):
+        try:
+            # THIS IS THE REAL FIREBASE CODE (FCM)!
+            from firebase_admin import messaging
+            fcm_msg = messaging.Message(
+                notification=messaging.Notification(title=title, body=message),
+                token=fcm_token
+            )
+            response = messaging.send(fcm_msg)
+            print(f"[REAL-MOBILE] Delivered to FCM for '{device_dict['name']}' (ID: {response})")
+            return {
+                "device_id": device_dict["id"],
+                "device_name": device_dict["name"],
+                "device_type": "mobile",
+                "status": "success",
+                "message": "Delivered via Google Firebase FCM",
+                "received_at": datetime.now().isoformat(),
+            }
+        except Exception as e:
+            print(f"[MOBILE:FCM-FAIL] {e}")
+            return {
+                "device_id": device_dict["id"],
+                "device_name": device_dict["name"],
+                "device_type": "mobile",
+                "status": "failed",
+                "message": f"FCM Error: {str(e)}",
+            }
+
+    # Fallback to Simulation Mode because we don't have a paid Google Firebase account right now.
     time.sleep(0.2)
     print(
         f"[MOBILE:SIM] Push simulated for '{device_dict['name']}' (ID: {device_dict['id']})"
@@ -124,7 +160,7 @@ def send_mobile_push(device_dict, title, message):
         "device_name": device_dict["name"],
         "device_type": "mobile",
         "status": "success",
-        "message": "Mobile push simulated (integrate FCM/APNs for production)",
+        "message": "Mobile push simulated (Firebase not configured)",
     }
 
 
@@ -168,6 +204,8 @@ def notification_worker(app):
         )
 
         job_tracker[job_id]["status"] = "processing"
+        dashboard_event.set()
+        dashboard_event.clear()
 
         results = []
         threads = []
@@ -218,6 +256,8 @@ def notification_worker(app):
                 "results": results,
             }
         )
+        dashboard_event.set()
+        dashboard_event.clear()
 
         print(f"[WORKER] Job {job_id} done — {successful} ok, {failed} failed")
 

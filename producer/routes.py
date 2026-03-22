@@ -1,4 +1,4 @@
-from flask import Blueprint, request, jsonify, render_template
+from flask import Blueprint, request, jsonify, render_template, Response
 from models import db, Device, Notification
 from services import (
     job_tracker,
@@ -6,6 +6,7 @@ from services import (
     VALID_DEVICE_TYPES,
     VAPID_PUBLIC_KEY,
     WORKER_POOL_SIZE,
+    dashboard_event,
 )
 from datetime import datetime
 import json
@@ -34,6 +35,30 @@ def get_network_ip():
 def admin_dashboard():
     """Serve the Producer admin dashboard."""
     return render_template("producer.html")
+
+
+@api.route("/events")
+def sse_stream():
+    """
+    Server-Sent Events (SSE) endpoint for the Dashboard.
+    Pushes a signal to the dashboard whenever something changes (device, results, queue).
+    """
+
+    def event_stream():
+        while True:
+            # Wait for any part of the system to call dashboard_event.set()
+            dashboard_event.wait(timeout=30)
+            yield "data: update\n\n"
+
+    return Response(
+        event_stream(),
+        mimetype="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        },
+    )
 
 
 @api.route("/api", methods=["GET"])
@@ -155,21 +180,44 @@ def register_device():
 
     # 3. Fill out the rest of the information
     ip_address = data.get("ip_address", "127.0.0.1").strip()
-    port = data.get("port", 5001)
+    port = int(data.get("port", 5001))
     email = data.get("email", "").strip()
+
+    # Check if a device with this IP address and port already exists
+    existing_device = Device.query.filter_by(ip_address=ip_address, port=port).first()
+    if existing_device:
+        return (
+            jsonify(
+                {
+                    "success": False,
+                    "error": "Device already registered",
+                    "hint": "A device with this IP and port is already registered.",
+                }
+            ),
+            409,
+        )
+
+    subscription_data = data.get("subscription_data")
+    if isinstance(subscription_data, dict):
+        subscription_data = json.dumps(subscription_data)
 
     # 4. Create a new Database Row using our Device Class (from models.py)
     device = Device(
         name=device_name,
         device_type=device_type,
         ip_address=ip_address,
-        port=int(port),
+        port=port,
         email=email,
+        subscription_data=subscription_data,
     )
 
     # 5. Tell the database to save our new row!
     db.session.add(device)
     db.session.commit()
+
+    # Signal the dashboard to refresh the device list
+    dashboard_event.set()
+    dashboard_event.clear()
 
     print(
         f"[NEW DEVICE] Registered: '{device_name}' type={device_type} "
@@ -210,6 +258,10 @@ def unregister_device(device_id):
     device_name = device.name
     db.session.delete(device)
     db.session.commit()
+
+    # Signal the dashboard to refresh
+    dashboard_event.set()
+    dashboard_event.clear()
 
     print(f"[REMOVED] Device unregistered: '{device_name}' (ID: {device_id})")
 
@@ -329,6 +381,7 @@ def send_notification():
             "device_type": d.device_type,
             "ip_address": d.ip_address,
             "port": d.port,
+            "subscription_data": d.subscription_data,
         }
         for d in target_devices
     ]
@@ -353,6 +406,10 @@ def send_notification():
     # DROP THE JOB INTO THE QUEUE.
     # From here, the background workers (in services.py) will pick it up and process it.
     notification_queue.put(job)
+
+    # Signal the dashboard that a new job is in the queue
+    dashboard_event.set()
+    dashboard_event.clear()
 
     target_addresses = [
         f"http://{d['ip_address']}:{d['port']}" for d in device_dicts
