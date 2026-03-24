@@ -187,7 +187,13 @@ def register_with_producer(name, port, producer_port):
             print(f"  Address:   http://127.0.0.1:{port}")
             return device_id
         elif response.status_code == 409:
-            print(f"✓ Already registered with Producer at Port {producer_port}")
+            data = response.json()
+            if "device" in data and "device_id" in data["device"]:
+                device_id = data["device"]["device_id"]
+                app.config["DEVICE_ID"] = device_id
+                print(f"✓ Already registered with Producer at Port {producer_port}. Linked to existing ID: {device_id}")
+                return device_id
+            print(f"✓ Already registered with Producer at Port {producer_port} (No ID returned)")
             return "already-registered"
         else:
             print(f"⚠ Registration failed: {response.text}")

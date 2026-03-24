@@ -1,7 +1,7 @@
 import pytest
 import json
 from producer import create_app
-from models import db
+from database import db, Device, Notification
 
 
 @pytest.fixture

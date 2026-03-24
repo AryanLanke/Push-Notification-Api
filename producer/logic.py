@@ -7,7 +7,7 @@ import time
 from datetime import datetime
 from dotenv import load_dotenv
 from pywebpush import webpush, WebPushException
-from models import db, Notification
+from database import db, Notification
 
 load_dotenv()
 
@@ -29,9 +29,22 @@ notification_queue = queue.Queue()
 # without having to query the database every single second.
 job_tracker = {}
 
-# SIGNAL: Used to tell the Producer Dashboard (via SSE) that something has changed.
-# This replaces the need for the browser to poll every 5 seconds.
-dashboard_event = threading.Event()
+# SSE Client Management
+# Instead of a single Event, we maintain a list of Queues — one per connected dashboard tab.
+# When something changes, broadcast_sse() pushes a typed JSON message to every connected client.
+# This means the browser NEVER needs to poll. It just listens.
+sse_clients = []
+sse_clients_lock = threading.Lock()
+
+
+def broadcast_sse(data):
+    """Push a typed event to all connected SSE dashboard clients instantly."""
+    with sse_clients_lock:
+        for client_queue in sse_clients:
+            try:
+                client_queue.put_nowait(data)
+            except Exception:
+                pass
 
 
 def send_web_push(device_dict, title, message):
@@ -160,7 +173,7 @@ def send_mobile_push(device_dict, title, message):
         "device_name": device_dict["name"],
         "device_type": "mobile",
         "status": "success",
-        "message": "Mobile push simulated (Firebase not configured)",
+        "message": "Mobile push simulated (Firebas    e not configured)",
     }
 
 
@@ -188,7 +201,7 @@ DEVICE_HANDLERS = {
 def notification_worker(app):
     """
     Worker thread logic that pulls jobs from queue.
-    Think of a 'Worker Thread' as a mini-employee running in the background.
+Think of a 'Worker Thread' as a mini-employee running in the background.
     They sit in a loop forever, waiting for a job to appear in the 'notification_queue'.
     """
     while True:
@@ -204,8 +217,7 @@ def notification_worker(app):
         )
 
         job_tracker[job_id]["status"] = "processing"
-        dashboard_event.set()
-        dashboard_event.clear()
+        broadcast_sse({"type": "job_processing", "job_id": job_id})
 
         results = []
         threads = []
@@ -256,8 +268,13 @@ def notification_worker(app):
                 "results": results,
             }
         )
-        dashboard_event.set()
-        dashboard_event.clear()
+        broadcast_sse({
+            "type": "job_complete",
+            "job_id": job_id,
+            "status": "completed",
+            "successful": successful,
+            "failed": failed,
+        })
 
         print(f"[WORKER] Job {job_id} done — {successful} ok, {failed} failed")
 

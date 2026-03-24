@@ -12,14 +12,14 @@ from flask import Flask, jsonify
 from dotenv import load_dotenv
 import os
 
-# Import our database definitions (from models.py)
-from models import db
+# Import our database definitions (from database.py)
+from database import db
 
-# Import our web address endpoints (from routes.py)
-from routes import api, get_network_ip
+# Import our web address endpoints (from endpoints.py)
+from endpoints import api, get_network_ip
 
-# Import our background worker logic (from services.py)
-from services import start_worker_pool, WORKER_POOL_SIZE
+# Import our background worker logic (from logic.py)
+from logic import start_worker_pool, WORKER_POOL_SIZE
 
 # Load passwords/API keys from the .env file secretly
 load_dotenv()
@@ -108,7 +108,7 @@ def create_app(testing=False):
 
     # Initialize database and worker pool on startup
     with app.app_context():
-        # This scans models.py and creates the tables if they don't exist yet
+        # This scans database.py and creates the tables if they don't exist yet
         db.create_all()
         # Start our 5 background threads to process notifications
         if not testing:
