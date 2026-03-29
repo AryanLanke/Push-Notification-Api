@@ -162,13 +162,13 @@ def status():
 # ============================================================================
 
 
-def register_with_producer(name, port, producer_port):
+def register_with_producer(name, port, producer_host, producer_port):
     """
     Auto-register this consumer device with the Producer API.
     When you start this script, it automatically sends a POST request
     to the Producer saying "Hi, I'm here, here is my IP and Port!"
     """
-    producer_url = f"http://127.0.0.1:{producer_port}/devices/register"
+    producer_url = f"http://{producer_host}:{producer_port}/devices/register"
     payload = {
         "name": name,
         "device_type": "web",
@@ -199,7 +199,7 @@ def register_with_producer(name, port, producer_port):
             print(f"⚠ Registration failed: {response.text}")
             return None
     except requests.exceptions.ConnectionError:
-        print(f"⚠ Could not reach Producer at Port {producer_port}")
+        print(f"⚠ Could not reach Producer at http://{producer_host}:{producer_port}")
         print("  Make sure producer.py is running first!")
         return None
 
@@ -225,6 +225,12 @@ if __name__ == "__main__":
         help="Name of this device",
     )
     parser.add_argument(
+        "--producer-host",
+        type=str,
+        default="127.0.0.1",
+        help="Producer host IP/address (default: 127.0.0.1)",
+    )
+    parser.add_argument(
         "--producer-port",
         type=int,
         default=5000,
@@ -234,17 +240,18 @@ if __name__ == "__main__":
 
     app.config["DEVICE_NAME"] = args.name
     app.config["PORT"] = args.port
+    app.config["PRODUCER_HOST"] = args.producer_host
     app.config["PRODUCER_PORT"] = args.producer_port
 
     print("=" * 60)
     print(f"CONSUMER DEVICE — {args.name}")
     print("=" * 60)
     print(f"  This device:  http://127.0.0.1:{args.port}")
-    print(f"  Producer at:  http://127.0.0.1:{args.producer_port}")
+    print(f"  Producer at:  http://{args.producer_host}:{args.producer_port}")
     print("")
 
     # Auto-register with the Producer API
-    register_with_producer(args.name, args.port, args.producer_port)
+    register_with_producer(args.name, args.port, args.producer_host, args.producer_port)
 
     print("")
     print(f"  Dashboard: http://localhost:{args.port}")

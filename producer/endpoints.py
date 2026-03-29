@@ -572,6 +572,7 @@ def get_notification_history():
             "total_devices": n.total_devices,
             "successful": n.successful,
             "failed": n.failed,
+            "details": json.loads(n.details) if n.details else [],
         }
         for n in notifications
     ]

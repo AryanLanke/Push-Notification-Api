@@ -530,6 +530,12 @@
             const empty = document.getElementById('emptyState');
             if (empty) empty.remove();
 
+            // Fire the actual Desktop System Notification
+            // (If you enabled it in browser settings, this shows the native popup)
+            if (Notification.permission === 'granted') {
+                new Notification(n.title, { body: n.message });
+            }
+
             const li = document.createElement('li');
             li.className = 'notification-item new-item';
             li.innerHTML = `<h3>${esc(n.title)}</h3><p>${esc(n.message)}</p><div class="time">Received at: ${esc(n.received_at)}</div>`;

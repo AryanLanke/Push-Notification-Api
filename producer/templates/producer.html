@@ -678,6 +678,23 @@
             to   { opacity: 1; transform: translateY(0); }
         }
 
+        .history-item:hover {
+            border-color: var(--border-strong);
+            background: #fdfdfe;
+            box-shadow: var(--shadow-md);
+        }
+
+        .toggle-arrow {
+            font-size: 0.65rem;
+            color: var(--muted-light);
+            margin-left: 6px;
+            transition: transform 0.2s;
+        }
+
+        .history-item.open .toggle-arrow {
+            transform: rotate(180deg);
+        }
+
         /* ── SCROLLBARS ── */
         ::-webkit-scrollbar {
             width: 4px;
@@ -856,6 +873,18 @@
     <script>
         const API = window.location.origin;
         const typeIcon = { web: '🌐', mobile: '📱', pager: '📟' };
+
+        function esc(s) {
+            return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        }
+
+        function toggleDetails(card) {
+            const panel = card.querySelector('.detail-panel');
+            if (!panel) return;
+            const isHidden = panel.style.display === 'none';
+            panel.style.display = isHidden ? 'block' : 'none';
+            card.classList.toggle('open', isHidden);
+        }
 
         // ── TOGGLE ALL CHECKBOX ──
         function toggleAll(el) {
@@ -1098,16 +1127,40 @@
                     const cls = n.failed === 0 ? 'success' : n.successful > 0 ? 'partial' : '';
                     const timeStr = n.enqueued_at ? new Intl.DateTimeFormat('en-US', dateOptions).format(new Date(n.enqueued_at + 'Z')) : '—';
 
+                    // Build per-device detail rows (Change #1: Show WHICH device failed/succeeded)
+                    let detailsHtml = '';
+                    if (n.details && n.details.length > 0) {
+                        const rows = n.details.map(d => {
+                            const icon = d.status === 'success' ? '✅' : '❌';
+                            const color = d.status === 'success' ? 'var(--success)' : 'var(--danger)';
+                            const reason = d.message || 'Unknown';
+                            return `<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--border);font-size:0.76rem;">
+                                <span>${icon}</span>
+                                <span style="font-weight:600;min-width:120px;">${esc(d.device_name || 'Unknown')}</span>
+                                <span class="type-badge type-${d.device_type || 'web'}" style="font-size:0.6rem;">${(d.device_type || 'web').toUpperCase()}</span>
+                                <span style="color:${color};margin-left:auto;text-align:right;max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${esc(reason)}">${esc(reason)}</span>
+                            </div>`;
+                        }).join('');
+                        detailsHtml = `<div class="detail-panel" style="display:none;margin-top:10px;padding:8px 10px;background:var(--surface);border:1px solid var(--border);border-radius:6px;">
+                            <div style="font-size:0.68rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px;">Per-Device Results</div>
+                            ${rows}
+                        </div>`;
+                    }
+
                     return `
-        <div class="history-item ${cls}">
-          <div class="history-title">${n.title}</div>
-          <div class="history-msg">${n.message}</div>
+        <div class="history-item ${cls}" style="cursor:pointer;" onclick="toggleDetails(this)">
+          <div style="display:flex;align-items:center;justify-content:space-between;">
+            <div class="history-title">${esc(n.title)}</div>
+            ${detailsHtml ? '<span class="toggle-arrow">▼</span>' : ''}
+          </div>
+          <div class="history-msg">${esc(n.message)}</div>
           <div class="history-meta">
             <span class="hm-chip hm-ok">✅ ${n.successful} sent</span>
             ${n.failed > 0 ? `<span class="hm-chip hm-fail">❌ ${n.failed} failed</span>` : ''}
             <span class="hm-chip hm-queue">${n.status.toUpperCase()}</span>
             <span class="hm-time">${timeStr}</span>
           </div>
+          ${detailsHtml}
         </div>`;
                 }).join('');
             } catch (e) {

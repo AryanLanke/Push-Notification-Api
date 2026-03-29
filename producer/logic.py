@@ -47,6 +47,20 @@ def broadcast_sse(data):
                 pass
 
 
+def check_device_active(device_dict):
+    """
+    Quick health check: tries to reach the device's /status endpoint.
+    Returns True if the device responds, False if it is offline.
+    Uses a short 2-second timeout so we don't wait forever.
+    """
+    try:
+        url = f"http://{device_dict['ip_address']}:{device_dict['port']}/status"
+        response = requests.get(url, timeout=2)
+        return response.status_code == 200
+    except Exception:
+        return False
+
+
 def send_web_push(device_dict, title, message):
     """
     Handles sending notifications to Web Browsers.
@@ -96,6 +110,20 @@ def send_web_push(device_dict, title, message):
             }
 
     else:
+        # Health Check: Is this device actually running right now?
+        if not check_device_active(device_dict):
+            print(
+                f"[WEB:OFFLINE] Device '{device_dict['name']}' at "
+                f"http://{device_dict['ip_address']}:{device_dict['port']} is not active"
+            )
+            return {
+                "device_id": device_dict["id"],
+                "device_name": device_dict["name"],
+                "device_type": "web",
+                "status": "failed",
+                "message": f"Device offline — not reachable at http://{device_dict['ip_address']}:{device_dict['port']}",
+            }
+
         address = (
             f"http://{device_dict['ip_address']}:{device_dict['port']}/receive"
         )
@@ -131,6 +159,7 @@ def send_web_push(device_dict, title, message):
             }
 
 
+
 def send_mobile_push(device_dict, title, message):
     fcm_token = device_dict.get("subscription_data")
 
@@ -163,7 +192,9 @@ def send_mobile_push(device_dict, title, message):
                 "message": f"FCM Error: {str(e)}",
             }
 
-    # Fallback to Simulation Mode because we don't have a paid Google Firebase account right now.
+    # Fallback to Simulation Mode
+    # NOTE: Mobile simulation always succeeds because there is no real phone connected.
+    # The health check only applies to Web devices which have a real Flask consumer running.
     time.sleep(0.2)
     print(
         f"[MOBILE:SIM] Push simulated for '{device_dict['name']}' (ID: {device_dict['id']})"
@@ -173,11 +204,13 @@ def send_mobile_push(device_dict, title, message):
         "device_name": device_dict["name"],
         "device_type": "mobile",
         "status": "success",
-        "message": "Mobile push simulated (Firebas    e not configured)",
+        "message": "Mobile push simulated (Firebase not configured)",
     }
 
 
 def send_pager_notification(device_dict, title, message):
+    # NOTE: Pager simulation always succeeds because there is no real pager connected.
+    # The health check only applies to Web devices which have a real Flask consumer running.
     time.sleep(0.1)
     print(
         f"[PAGER:SIM] Alert simulated for '{device_dict['name']}' (ID: {device_dict['id']})"
@@ -198,88 +231,99 @@ DEVICE_HANDLERS = {
 }
 
 
+def process_job(job, app):
+    """
+    Process a single notification job synchronously.
+    This is extracted from the infinite worker loop so it can be 
+    safely tested without spinning up background threads.
+    """
+    job_id = job["job_id"]
+    title = job["title"]
+    message = job["message"]
+    target_devices = job["target_devices"]
+
+    print(f"\n[WORKER] Processing job {job_id}: '{title}' → {len(target_devices)} device(s)")
+
+    job_tracker[job_id]["status"] = "processing"
+    broadcast_sse({"type": "job_processing", "job_id": job_id})
+
+    results = []
+    threads = []
+
+    # 2. Loop through every device we need to send this to
+    for device_dict in target_devices:
+        # Pick the right delivery boy (Web, Mobile, or Pager)
+        handler = DEVICE_HANDLERS.get(
+            device_dict["device_type"], send_web_push
+        )
+
+        # We use mini-threads here so we can send to 100 devices at the EXACT SAME TIME,
+        # rather than waiting for device 1 to finish before messaging device 2.
+        def _dispatch(d=device_dict, h=handler):
+            result = h(d, title, message)
+            results.append(result)
+
+        t = threading.Thread(target=_dispatch)
+        threads.append(t)
+        t.start()
+
+    # Wait for all the mini-threads to finish sending
+    for t in threads:
+        t.join()
+
+    # 3. Count up the successes and failures
+    successful = len([r for r in results if r["status"] == "success"])
+    failed = len([r for r in results if r["status"] == "failed"])
+
+    # 4. Update the SQL Database with the final scores
+    with app.app_context():
+        notif = db.session.get(Notification, job_id)
+        if notif:
+            notif.processed_at = datetime.utcnow()
+            notif.successful = successful
+            notif.failed = failed
+            notif.status = "completed"
+            notif.details = json.dumps(results)
+            db.session.commit()
+
+    # Update the fast RAM tracker
+    job_tracker[job_id].update(
+        {
+            "status": "completed",
+            "processed_at": datetime.now().isoformat(),
+            "successful": successful,
+            "failed": failed,
+            "results": results,
+        }
+    )
+    broadcast_sse({
+        "type": "job_complete",
+        "job_id": job_id,
+        "status": "completed",
+        "successful": successful,
+        "failed": failed,
+    })
+
+    print(f"[WORKER] Job {job_id} done — {successful} ok, {failed} failed")
+
 def notification_worker(app):
     """
     Worker thread logic that pulls jobs from queue.
-Think of a 'Worker Thread' as a mini-employee running in the background.
+    Think of a 'Worker Thread' as a mini-employee running in the background.
     They sit in a loop forever, waiting for a job to appear in the 'notification_queue'.
     """
     while True:
         # 1. Grab the next job in line. This line "blocks" (pauses) until a job arrives.
         job = notification_queue.get()
-        job_id = job["job_id"]
-        title = job["title"]
-        message = job["message"]
-        target_devices = job["target_devices"]
+        
+        try:
+            process_job(job, app)
+        except Exception as e:
+            print(f"[WORKER] Error processing job: {e}")
+        finally:
+            # 5. Tell the queue "I am finished with this job!"
+            notification_queue.task_done()
 
-        print(
-            f"\n[WORKER] Processing job {job_id}: '{title}' → {len(target_devices)} device(s)"
-        )
-
-        job_tracker[job_id]["status"] = "processing"
-        broadcast_sse({"type": "job_processing", "job_id": job_id})
-
-        results = []
-        threads = []
-
-        # 2. Loop through every device we need to send this to
-        for device_dict in target_devices:
-            # Pick the right delivery boy (Web, Mobile, or Pager)
-            handler = DEVICE_HANDLERS.get(
-                device_dict["device_type"], send_web_push
-            )
-
-            # We use mini-threads here so we can send to 100 devices at the EXACT SAME TIME,
-            # rather than waiting for device 1 to finish before messaging device 2.
-            def _dispatch(d=device_dict, h=handler):
-                result = h(d, title, message)
-                results.append(result)
-
-            t = threading.Thread(target=_dispatch)
-            threads.append(t)
-            t.start()
-
-        # Wait for all the mini-threads to finish sending
-        for t in threads:
-            t.join()
-
-        # 3. Count up the successes and failures
-        successful = len([r for r in results if r["status"] == "success"])
-        failed = len([r for r in results if r["status"] == "failed"])
-
-        # 4. Update the SQL Database with the final scores
-        with app.app_context():
-            notif = db.session.get(Notification, job_id)
-            if notif:
-                notif.processed_at = datetime.utcnow()
-                notif.successful = successful
-                notif.failed = failed
-                notif.status = "completed"
-                notif.details = json.dumps(results)
-                db.session.commit()
-
-        # Update the fast RAM tracker
-        job_tracker[job_id].update(
-            {
-                "status": "completed",
-                "processed_at": datetime.now().isoformat(),
-                "successful": successful,
-                "failed": failed,
-                "results": results,
-            }
-        )
-        broadcast_sse({
-            "type": "job_complete",
-            "job_id": job_id,
-            "status": "completed",
-            "successful": successful,
-            "failed": failed,
-        })
-
-        print(f"[WORKER] Job {job_id} done — {successful} ok, {failed} failed")
-
-        # 5. Tell the queue "I am finished with this job!"
-        notification_queue.task_done()
 
 
 def start_worker_pool(app):

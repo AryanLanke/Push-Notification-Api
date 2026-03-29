@@ -14,3 +14,4 @@ services:
       - "5001:5001"
     environment:
       - FLASK_ENV=development
+    command: ["python", "consumer.py", "--producer-host", "producer"]
