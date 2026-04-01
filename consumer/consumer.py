@@ -162,7 +162,7 @@ def status():
 # ============================================================================
 
 
-def register_with_producer(name, port, producer_host, producer_port):
+def register_with_producer(name, port, producer_host, producer_port, host="127.0.0.1"):
     """
     Auto-register this consumer device with the Producer API.
     When you start this script, it automatically sends a POST request
@@ -172,7 +172,7 @@ def register_with_producer(name, port, producer_host, producer_port):
     payload = {
         "name": name,
         "device_type": "web",
-        "ip_address": "127.0.0.1",
+        "ip_address": host,
         "port": port,
         "email": "",
     }
@@ -236,6 +236,12 @@ if __name__ == "__main__":
         default=5000,
         help="Producer port (default: 5000)",
     )
+    parser.add_argument(
+        "--host",
+        type=str,
+        default="127.0.0.1",
+        help="Host IP/address for this consumer (default: 127.0.0.1)",
+    )
     args = parser.parse_args()
 
     app.config["DEVICE_NAME"] = args.name
@@ -251,7 +257,7 @@ if __name__ == "__main__":
     print("")
 
     # Auto-register with the Producer API
-    register_with_producer(args.name, args.port, args.producer_host, args.producer_port)
+    register_with_producer(args.name, args.port, args.producer_host, args.producer_port, args.host)
 
     print("")
     print(f"  Dashboard: http://localhost:{args.port}")
