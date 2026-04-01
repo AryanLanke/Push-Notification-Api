@@ -365,7 +365,7 @@ def send_notification():
                         "not_found": not_found,
                     }
                 ),
-                404,
+                 404,
             )
     else:
         target_devices = Device.query.all()
