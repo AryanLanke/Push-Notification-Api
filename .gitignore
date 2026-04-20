@@ -2,7 +2,6 @@
 .venv/
 venv/
 env/
-.env
 
 # Python cache files
 __pycache__/
@@ -32,7 +31,6 @@ build/
 *.egg-info/
 
 # Local environment files (may contain secrets)
-.env
 .env.local
 *.local
 vapid_keys.txt
