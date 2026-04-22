@@ -179,7 +179,10 @@ def register_with_producer(name, port, producer_host, producer_port, host="127.0
     Auto-register this consumer device with the Producer API.
     When you start this script, it automatically sends a POST request
     to the Producer saying "Hi, I'm here, here is my IP and Port!"
+    Retries up to 5 times in case the Producer hasn't started yet (common in Docker).
     """
+    import time
+
     producer_url = f"http://{producer_host}:{producer_port}/devices/register"
     payload = {
         "name": name,
@@ -188,32 +191,39 @@ def register_with_producer(name, port, producer_host, producer_port, host="127.0
         "port": port,
         "email": "",
     }
-    try:
-        response = requests.post(producer_url, json=payload, timeout=5)
-        if response.status_code == 201:
-            data = response.json()
-            device_id = data["device"]["device_id"]
-            app.config["DEVICE_ID"] = device_id
-            print(f"✓ Registered with Producer at Port {producer_port}")
-            print(f"  Device ID: {device_id}")
-            print(f"  Address:   http://{host}:{port}")
-            return device_id
-        elif response.status_code == 409:
-            data = response.json()
-            if "device" in data and "device_id" in data["device"]:
+
+    max_retries = 5
+    for attempt in range(1, max_retries + 1):
+        try:
+            response = requests.post(producer_url, json=payload, timeout=5)
+            if response.status_code == 201:
+                data = response.json()
                 device_id = data["device"]["device_id"]
                 app.config["DEVICE_ID"] = device_id
-                print(f"✓ Already registered with Producer at Port {producer_port}. Linked to existing ID: {device_id}")
+                print(f"✓ Registered with Producer at Port {producer_port}")
+                print(f"  Device ID: {device_id}")
+                print(f"  Address:   http://{host}:{port}")
                 return device_id
-            print(f"✓ Already registered with Producer at Port {producer_port} (No ID returned)")
-            return "already-registered"
-        else:
-            print(f"⚠ Registration failed: {response.text}")
-            return None
-    except requests.exceptions.ConnectionError:
-        print(f"⚠ Could not reach Producer at http://{producer_host}:{producer_port}")
-        print("  Make sure producer.py is running first!")
-        return None
+            elif response.status_code == 409:
+                data = response.json()
+                if "device" in data and "device_id" in data["device"]:
+                    device_id = data["device"]["device_id"]
+                    app.config["DEVICE_ID"] = device_id
+                    print(f"✓ Already registered with Producer at Port {producer_port}. Linked to existing ID: {device_id}")
+                    return device_id
+                print(f"✓ Already registered with Producer at Port {producer_port} (No ID returned)")
+                return "already-registered"
+            else:
+                print(f"⚠ Registration failed: {response.text}")
+                return None
+        except requests.exceptions.ConnectionError:
+            if attempt < max_retries:
+                print(f"  ⏳ Producer not ready yet... retrying in 3s (attempt {attempt}/{max_retries})")
+                time.sleep(3)
+            else:
+                print(f"⚠ Could not reach Producer at http://{producer_host}:{producer_port} after {max_retries} attempts")
+                print("  Make sure producer.py is running first!")
+                return None
 
 
 # ============================================================================
