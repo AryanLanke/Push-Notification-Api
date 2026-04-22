@@ -7,6 +7,8 @@ services:
       - "5000:5000"
     environment:
       - FLASK_ENV=development
+    depends_on:
+      - consumer
 
   consumer:
     build: ./consumer
@@ -14,4 +16,10 @@ services:
       - "5001:5001"
     environment:
       - FLASK_ENV=development
-    command: ["python", "consumer.py", "--producer-host", "producer", "--host", "consumer"]
+    depends_on:
+      - producer
+    command: ["python", "consumer.py",
+              "--producer-host", "producer",
+              "--host", "consumer",
+              "--name", "Consumer-device",
+              "--port", "5001"]

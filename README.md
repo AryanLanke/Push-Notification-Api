@@ -118,22 +118,44 @@ python consumer.py --port 5003 --producer-port 5000 --name "Device-3"
 
 ---
 
-### Option B — Run with Docker Compose
+### Option B — Run with Docker Compose (Recommended)
 
+This is the flawless, zero-configuration way to run the project. You do not need to install Python or configure virtual environments.
+
+#### Step 1 — Clean Slate (Optional but Recommended)
+If you've run the project manually before, clear the old SQLite database to prevent IP conflicts:
+```bash
+# Windows
+del producer\instance\notifications.db
+# Mac/Linux
+rm producer/instance/notifications.db
+```
+
+#### Step 2 — Unleash Docker
+Simply run this one command from the project root:
 ```bash
 docker-compose up --build
 ```
+*What happens:* Docker downloads Python, sets up the Producer (Port 5000) and Consumer (Port 5001), links them together, and starts them. The Consumer will automatically register itself with the Producer!
 
-| Service  | URL                     |
-|----------|-------------------------|
-| Producer | http://localhost:5000   |
-| Consumer | http://localhost:5001   |
+#### Step 3 — Access the Dashboards
+Once the terminal logs show the servers are running, open your web browser:
+| Service | URL |
+|---|---|
+| **Producer Dashboard** | `http://localhost:5000` |
+| **Consumer Dashboard** | `http://localhost:5001` |
 
-To stop:
-
-```bash
-docker-compose down
-```
+#### Step 4 — Simulate Multiple Devices (Advanced Test)
+If you want to simulate sending to multiple local devices without complex Docker scaling:
+1. Open a **Brand New Terminal** window on your PC.
+2. Navigate to the consumer folder and spin up a new device on a different port:
+   ```bash
+   cd consumer
+   python consumer.py --port 5002 --name web2 --no-register
+   ```
+3. Open `http://localhost:5002` in your browser.
+4. Go back to the Producer Dashboard (`localhost:5000`) and manually register **web2** on IP `localhost` and Port `5002`.
+5. Send a broadcast, and watch it hit both devices!
 
 ---
 
@@ -143,7 +165,7 @@ docker-compose down
 |---------------|-------------|--------------------------------------|
 | Producer API  | `5000`      | REST API + Admin Dashboard           |
 | Consumer App  | `5001`      | Notification receiver + Dashboard    |
-| Consumer #2   | `5002`      | *(optional)* Second consumer device  |
+| Custom Devices| `5002+`     | Add more consumers on any free port  |
 
 ---
 

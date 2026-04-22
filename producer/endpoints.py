@@ -205,17 +205,43 @@ def register_device():
     port = int(data.get("port", 5001))
     email = data.get("email", "").strip()
 
-    # Check if a device with this IP address and port already exists
-    # This ensures the same device is not registered twice.
-    existing_device = Device.query.filter_by(ip_address=ip_address, port=port).first()
+    # Resolve hostname to IP if it's not already an IP
+    try:
+        ip_address = socket.gethostbyname(ip_address)
+    except Exception:
+        pass
+
+    # Collect all IPs that refer to THIS machine (localhost + network IP).
+    # This prevents the same device from being registered twice under
+    # different aliases like "127.0.0.1" vs "192.168.1.11" vs "localhost".
+    local_ips = {"127.0.0.1"}
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        local_ips.add(s.getsockname()[0])
+        s.close()
+    except Exception:
+        pass
+
+    # Smart duplicate check:
+    # If the incoming IP is a local address, check the port against ALL local IPs.
+    # This catches "localhost:5001" vs "192.168.1.11:5001" as the SAME device.
+    if ip_address in local_ips:
+        existing_device = Device.query.filter(
+            Device.port == port,
+            Device.ip_address.in_(local_ips)
+        ).first()
+    else:
+        existing_device = Device.query.filter_by(ip_address=ip_address, port=port).first()
+
     if existing_device:
         return (
             jsonify(
                 {
                     "success": False,
-                    "error": "Device already registered",
+                    "error": f"Address already in use — {ip_address}:{port} is already registered as '{existing_device.name}'",
                     "device": existing_device.to_dict(),
-                    "hint": "A device with this IP and port is already registered.",
+                    "hint": "Remove the existing device first if you want to re-register this address with a different name.",
                 }
             ),
             409,

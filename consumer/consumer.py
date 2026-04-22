@@ -20,7 +20,19 @@ import requests
 import argparse
 import json
 import threading
+import socket
 from datetime import datetime
+
+def get_network_ip():
+    """Get the local network IP address of this machine."""
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except Exception:
+        return "127.0.0.1"
 
 app = Flask(__name__)
 
@@ -184,7 +196,7 @@ def register_with_producer(name, port, producer_host, producer_port, host="127.0
             app.config["DEVICE_ID"] = device_id
             print(f"✓ Registered with Producer at Port {producer_port}")
             print(f"  Device ID: {device_id}")
-            print(f"  Address:   http://127.0.0.1:{port}")
+            print(f"  Address:   http://{host}:{port}")
             return device_id
         elif response.status_code == 409:
             data = response.json()
@@ -239,8 +251,14 @@ if __name__ == "__main__":
     parser.add_argument(
         "--host",
         type=str,
-        default="127.0.0.1",
-        help="Host IP/address for this consumer (default: 127.0.0.1)",
+        default="auto",
+        help="Host IP/address for this consumer (default: auto-detect)",
+    )
+    parser.add_argument(
+        "--no-register",
+        action="store_true",
+        default=False,
+        help="Skip auto-registration (register manually via Producer dashboard)",
     )
     args = parser.parse_args()
 
@@ -249,15 +267,30 @@ if __name__ == "__main__":
     app.config["PRODUCER_HOST"] = args.producer_host
     app.config["PRODUCER_PORT"] = args.producer_port
 
+    if args.host == "auto":
+        register_host = get_network_ip()
+    else:
+        register_host = args.host
+
     print("=" * 60)
     print(f"CONSUMER DEVICE — {args.name}")
     print("=" * 60)
-    print(f"  This device:  http://127.0.0.1:{args.port}")
+    print(f"  This device:  http://{register_host}:{args.port}")
     print(f"  Producer at:  http://{args.producer_host}:{args.producer_port}")
     print("")
 
-    # Auto-register with the Producer API
-    register_with_producer(args.name, args.port, args.producer_host, args.producer_port, args.host)
+    if args.no_register:
+        # Consumer is running but NOT auto-registered.
+        # The mentor can register it manually via the Producer dashboard.
+        print("  ⏳ Waiting for manual registration via Producer Dashboard")
+        print(f"  ┌─────────────────────────────────────────────────┐")
+        print(f"  │  To register this device, use:                 │")
+        print(f"  │    IP Address : {register_host:<33}│")
+        print(f"  │    Port       : {args.port:<33}│")
+        print(f"  └─────────────────────────────────────────────────┘")
+    else:
+        # Auto-register with the Producer API
+        register_with_producer(args.name, args.port, args.producer_host, args.producer_port, register_host)
 
     print("")
     print(f"  Dashboard: http://localhost:{args.port}")
