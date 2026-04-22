@@ -224,9 +224,15 @@ def register_device():
         pass
 
     # Smart duplicate check:
-    # If the incoming IP is a local address, check the port against ALL local IPs.
-    # This catches "localhost:5001" vs "192.168.1.11:5001" as the SAME device.
-    if ip_address in local_ips:
+    # 1. If the IP is 127.0.0.1 (loopback), check if ANY device already uses this port.
+    #    Reason: 127.0.0.1 is meaningless in Docker (it refers to the producer itself).
+    #    If someone registers "localhost:5001", they clearly mean the consumer on port 5001,
+    #    which is already registered with its real IP (e.g. 172.19.0.3).
+    # 2. If the IP is a local network address, check against all known local IPs.
+    # 3. Otherwise, do an exact IP + port match.
+    if ip_address == "127.0.0.1":
+        existing_device = Device.query.filter_by(port=port).first()
+    elif ip_address in local_ips:
         existing_device = Device.query.filter(
             Device.port == port,
             Device.ip_address.in_(local_ips)
