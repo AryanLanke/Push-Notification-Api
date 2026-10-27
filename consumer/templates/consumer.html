@@ -453,6 +453,7 @@
 
     <div class="toolbar">
         <button class="refresh-btn" onclick="location.reload()">🔄 Refresh</button>
+        <button class="refresh-btn" id="pushBtn" onclick="enablePushNotifications()" style="background:var(--blue);color:#fff;border-color:var(--blue);">🔔 Enable Web Push</button>
         <span class="live-badge" id="liveBadge">
             <div class="live-dot"></div> Live — SSE connected
         </span>
@@ -521,7 +522,99 @@
         // Start SSE on page load
         window.addEventListener('load', () => {
             connectSSE();
+            checkPushSupport();
         });
+
+        function urlBase64ToUint8Array(base64String) {
+            const padding = '='.repeat((4 - base64String.length % 4) % 4);
+            const base64 = (base64String + padding)
+                .replace(/\-/g, '+')
+                .replace(/_/g, '/');
+            const rawData = window.atob(base64);
+            const outputArray = new Uint8Array(rawData.length);
+            for (let i = 0; i < rawData.length; ++i) {
+                outputArray[i] = rawData.charCodeAt(i);
+            }
+            return outputArray;
+        }
+
+        async function checkPushSupport() {
+            if ('serviceWorker' in navigator && 'PushManager' in window) {
+                try {
+                    const reg = await navigator.serviceWorker.getRegistration('/sw.js');
+                    if (reg) {
+                        const sub = await reg.pushManager.getSubscription();
+                        if (sub) {
+                            const btn = document.getElementById('pushBtn');
+                            if (btn) {
+                                btn.textContent = '✅ Web Push Active';
+                                btn.style.background = 'var(--success)';
+                                btn.style.borderColor = 'var(--success)';
+                            }
+                        }
+                    }
+                } catch (e) {}
+            }
+        }
+
+        async function enablePushNotifications() {
+            const btn = document.getElementById('pushBtn');
+            if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+                alert('Web Push is not supported in this browser.');
+                return;
+            }
+
+            try {
+                btn.disabled = true;
+                btn.textContent = '⏳ Subscribing...';
+
+                const permission = await Notification.requestPermission();
+                if (permission !== 'granted') {
+                    alert('Notification permission denied in browser.');
+                    btn.disabled = false;
+                    btn.textContent = '🔔 Enable Web Push';
+                    return;
+                }
+
+                const reg = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
+                await navigator.serviceWorker.ready;
+
+                const vapidRes = await fetch(`http://{{ producer_host }}:{{ producer_port }}/vapid/public-key`);
+                const vapidData = await vapidRes.json();
+                if (!vapidData.public_key) {
+                    alert('VAPID public key is not configured on Producer server.');
+                    btn.disabled = false;
+                    btn.textContent = '🔔 Enable Web Push';
+                    return;
+                }
+
+                const sub = await reg.pushManager.subscribe({
+                    userVisibleOnly: true,
+                    applicationServerKey: urlBase64ToUint8Array(vapidData.public_key)
+                });
+
+                const res = await fetch('/subscribe', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ subscription: sub })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    btn.textContent = '✅ Web Push Active';
+                    btn.style.background = 'var(--success)';
+                    btn.style.borderColor = 'var(--success)';
+                } else {
+                    alert('Subscription failed: ' + (data.error || 'Unknown error'));
+                    btn.disabled = false;
+                    btn.textContent = '🔔 Enable Web Push';
+                }
+            } catch (err) {
+                console.error('Push subscription failed:', err);
+                alert('Web Push Error: ' + err.message);
+                btn.disabled = false;
+                btn.textContent = '🔔 Enable Web Push';
+            }
+        }
 
 
 

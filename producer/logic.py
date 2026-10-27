@@ -1,15 +1,30 @@
+"""
+Producer Business Logic, Delivery Workers, Queue Engine, and Dispatchers.
+Supports Redis durable queue with in-memory fallback, bounded thread pool execution,
+Server-Sent Events broadcasting, and multi-protocol delivery (WebPush, FCM, HTTP).
+"""
+
 import os
 import json
 import requests
 import queue
 import threading
 import time
+import logging
 from datetime import datetime
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dotenv import load_dotenv
 from pywebpush import webpush, WebPushException
 from database import db, Notification
 
 load_dotenv()
+
+# Setup logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+)
+logger = logging.getLogger("ProducerLogic")
 
 VAPID_PRIVATE_KEY = os.getenv("VAPID_PRIVATE_KEY", "").replace("\\n", "\n")
 VAPID_PUBLIC_KEY = os.getenv("VAPID_PUBLIC_KEY", "")
@@ -18,21 +33,121 @@ VAPID_CLAIMS = {
 }
 
 VALID_DEVICE_TYPES = ["web", "mobile", "pager"]
-
 WORKER_POOL_SIZE = 5
+MAX_DISPATCH_THREADS = 20
 
-# Shared queues and tracking
-# A Queue is like a line at a restaurant. Jobs go in one end, workers pull them out the other.
-notification_queue = queue.Queue()
+# ---------------------------------------------------------------------------
+# Durable Queue Backend (Redis with In-Memory Fallback)
+# ---------------------------------------------------------------------------
 
-# We track jobs in RAM (dictionary) so the UI can check their status instantly
-# without having to query the database every single second.
+class DurableNotificationQueue:
+    """
+    Queue abstraction: uses Redis for distributed persistence if REDIS_URL is provided,
+    otherwise falls back to Python's in-memory queue.Queue().
+    """
+
+    def __init__(self, redis_url=None):
+        self.redis = None
+        self.redis_url = redis_url or os.getenv("REDIS_URL")
+        if self.redis_url:
+            try:
+                import redis
+                client = redis.Redis.from_url(self.redis_url, decode_responses=True)
+                client.ping()
+                self.redis = client
+                logger.info("Connected to Redis durable queue at %s", self.redis_url)
+            except Exception as e:
+                logger.warning("Could not connect to Redis (%s). Using in-memory queue fallback.", e)
+                self.redis = None
+
+        if not self.redis:
+            self._mem_queue = queue.Queue()
+
+    def put(self, job):
+        """Put job into queue (persisted to Redis if configured)."""
+        if self.redis:
+            self.redis.rpush("notification_jobs", json.dumps(job))
+        else:
+            self._mem_queue.put(job)
+
+    def get(self, block=True, timeout=1):
+        """Pull job from queue."""
+        if self.redis:
+            # blpop returns (queue_name, value) or None
+            item = self.redis.blpop("notification_jobs", timeout=timeout if block else 0)
+            if item:
+                return json.loads(item[1])
+            if not block:
+                raise queue.Empty()
+            return None
+        else:
+            if block:
+                try:
+                    return self._mem_queue.get(timeout=timeout)
+                except queue.Empty:
+                    return None
+            return self._mem_queue.get_nowait()
+
+    def get_nowait(self):
+        return self.get(block=False)
+
+    def task_done(self):
+        if not self.redis:
+            try:
+                self._mem_queue.task_done()
+            except ValueError:
+                pass
+
+    def empty(self):
+        if self.redis:
+            return self.redis.llen("notification_jobs") == 0
+        return self._mem_queue.empty()
+
+
+# Initialize global queue
+notification_queue = DurableNotificationQueue()
+
+# Thread-safe in-memory fast tracker for active dashboard polling/status
 job_tracker = {}
+job_tracker_lock = threading.Lock()
 
-# SSE Client Management
-# Instead of a single Event, we maintain a list of Queues — one per connected dashboard tab.
-# When something changes, broadcast_sse() pushes a typed JSON message to every connected client.
-# This means the browser NEVER needs to poll. It just listens.
+
+def update_job_tracker(job_id, data):
+    """Thread-safe update to the job_tracker dictionary."""
+    with job_tracker_lock:
+        if job_id not in job_tracker:
+            job_tracker[job_id] = {}
+        job_tracker[job_id].update(data)
+
+
+def get_job_tracker(job_id):
+    """Thread-safe read of a job from the job_tracker."""
+    with job_tracker_lock:
+        if job_id in job_tracker:
+            return dict(job_tracker[job_id])
+        return None
+
+
+def get_active_queued_jobs():
+    """Thread-safe snapshot of active jobs in the tracker."""
+    with job_tracker_lock:
+        active = []
+        for job_id, job in job_tracker.items():
+            if job.get("status") in ["queued", "processing"]:
+                active.append({
+                    "job_id": job_id,
+                    "title": job.get("title", "Unknown"),
+                    "status": job.get("status"),
+                    "total_devices": job.get("total_devices", 0),
+                    "enqueued_at": job.get("enqueued_at"),
+                })
+        return active
+
+
+# ---------------------------------------------------------------------------
+# SSE Client Management (Multi-tab real-time push)
+# ---------------------------------------------------------------------------
+
 sse_clients = []
 sse_clients_lock = threading.Lock()
 
@@ -47,11 +162,14 @@ def broadcast_sse(data):
                 pass
 
 
+# ---------------------------------------------------------------------------
+# Device Health and Delivery Handlers
+# ---------------------------------------------------------------------------
+
 def check_device_active(device_dict):
     """
-    Quick health check: tries to reach the device's /status endpoint.
-    Returns True if the device responds, False if it is offline.
-    Uses a short 2-second timeout so we don't wait forever.
+    Health check: pings device /status endpoint with a 2s timeout.
+    Returns True if online, False otherwise.
     """
     try:
         url = f"http://{device_dict['ip_address']}:{device_dict['port']}/status"
@@ -63,16 +181,15 @@ def check_device_active(device_dict):
 
 def send_web_push(device_dict, title, message):
     """
-    Handles sending notifications to Web Browsers.
-    It checks if the device registered with a real VAPID subscription (Real Browser popup)
-    or just an IP/Port (Simulation for your testing).
+    Delivers to Web Browsers:
+    Uses VAPID webpush if subscription_data exists, otherwise delivers via HTTP /receive.
     """
     sub_json = device_dict.get("subscription_data")
 
     if sub_json:
         try:
-            subscription = json.loads(sub_json)
-            payload = json.dumps({"title": title, "body": message})
+            subscription = json.loads(sub_json) if isinstance(sub_json, str) else sub_json
+            payload = json.dumps({"title": title, "body": message, "message": message})
 
             webpush(
                 subscription_info=subscription,
@@ -80,19 +197,17 @@ def send_web_push(device_dict, title, message):
                 vapid_private_key=VAPID_PRIVATE_KEY,
                 vapid_claims=VAPID_CLAIMS,
             )
-            print(
-                f"[REAL-WEB] Delivered via global push to '{device_dict['name']}'"
-            )
+            logger.info("Delivered via global VAPID web push to '%s'", device_dict['name'])
             return {
                 "device_id": device_dict["id"],
                 "device_name": device_dict["name"],
                 "device_type": "web",
                 "status": "success",
-                "message": "Delivered via Global Push Service",
+                "message": "Delivered via Global Web Push Service",
                 "received_at": datetime.now().isoformat(),
             }
         except WebPushException as ex:
-            print(f"[WEB:VAPID-FAIL] {ex}")
+            logger.warning("VAPID Push error for '%s': %s", device_dict['name'], ex)
             return {
                 "device_id": device_dict["id"],
                 "device_name": device_dict["name"],
@@ -101,6 +216,7 @@ def send_web_push(device_dict, title, message):
                 "message": f"Global Push Error: {ex}",
             }
         except Exception as e:
+            logger.error("Web Push exception for '%s': %s", device_dict['name'], e)
             return {
                 "device_id": device_dict["id"],
                 "device_name": device_dict["name"],
@@ -110,11 +226,11 @@ def send_web_push(device_dict, title, message):
             }
 
     else:
-        # Health Check: Is this device actually running right now?
+        # Pre-delivery health check
         if not check_device_active(device_dict):
-            print(
-                f"[WEB:OFFLINE] Device '{device_dict['name']}' at "
-                f"http://{device_dict['ip_address']}:{device_dict['port']} is not active"
+            logger.warning(
+                "Device '%s' at http://%s:%s is inactive/offline",
+                device_dict['name'], device_dict['ip_address'], device_dict['port']
             )
             return {
                 "device_id": device_dict["id"],
@@ -124,9 +240,7 @@ def send_web_push(device_dict, title, message):
                 "message": f"Device offline — not reachable at http://{device_dict['ip_address']}:{device_dict['port']}",
             }
 
-        address = (
-            f"http://{device_dict['ip_address']}:{device_dict['port']}/receive"
-        )
+        address = f"http://{device_dict['ip_address']}:{device_dict['port']}/receive"
         try:
             payload = {
                 "title": title,
@@ -147,7 +261,7 @@ def send_web_push(device_dict, title, message):
                 "device_name": device_dict["name"],
                 "device_type": "web",
                 "status": "failed",
-                "message": f"Consumer error: {response.status_code}",
+                "message": f"Consumer returned HTTP {response.status_code}",
             }
         except Exception as e:
             return {
@@ -159,21 +273,25 @@ def send_web_push(device_dict, title, message):
             }
 
 
-
 def send_mobile_push(device_dict, title, message):
+    """Deliver to Mobile devices via Google Firebase (FCM) or simulated fallback."""
     fcm_token = device_dict.get("subscription_data")
 
-    # If the company provides a real FCM Token and has configured their Google Firebase Account:
     if fcm_token and os.getenv("FIREBASE_CREDENTIALS_FILE"):
         try:
-            # THIS IS THE REAL FIREBASE CODE (FCM)!
-            from firebase_admin import messaging
+            import firebase_admin
+            from firebase_admin import messaging, credentials
+
+            if not firebase_admin._apps:
+                cred = credentials.Certificate(os.getenv("FIREBASE_CREDENTIALS_FILE"))
+                firebase_admin.initialize_app(cred)
+
             fcm_msg = messaging.Message(
                 notification=messaging.Notification(title=title, body=message),
                 token=fcm_token
             )
             response = messaging.send(fcm_msg)
-            print(f"[REAL-MOBILE] Delivered to FCM for '{device_dict['name']}' (ID: {response})")
+            logger.info("Delivered to FCM for '%s' (ID: %s)", device_dict['name'], response)
             return {
                 "device_id": device_dict["id"],
                 "device_name": device_dict["name"],
@@ -183,7 +301,7 @@ def send_mobile_push(device_dict, title, message):
                 "received_at": datetime.now().isoformat(),
             }
         except Exception as e:
-            print(f"[MOBILE:FCM-FAIL] {e}")
+            logger.error("FCM error for '%s': %s", device_dict['name'], e)
             return {
                 "device_id": device_dict["id"],
                 "device_name": device_dict["name"],
@@ -192,13 +310,9 @@ def send_mobile_push(device_dict, title, message):
                 "message": f"FCM Error: {str(e)}",
             }
 
-    # Fallback to Simulation Mode
-    # NOTE: Mobile simulation always succeeds because there is no real phone connected.
-    # The health check only applies to Web devices which have a real Flask consumer running.
+    # Simulation Mode
     time.sleep(0.2)
-    print(
-        f"[MOBILE:SIM] Push simulated for '{device_dict['name']}' (ID: {device_dict['id']})"
-    )
+    logger.info("Mobile push simulated for '%s' (ID: %s)", device_dict['name'], device_dict['id'])
     return {
         "device_id": device_dict["id"],
         "device_name": device_dict["name"],
@@ -209,12 +323,9 @@ def send_mobile_push(device_dict, title, message):
 
 
 def send_pager_notification(device_dict, title, message):
-    # NOTE: Pager simulation always succeeds because there is no real pager connected.
-    # The health check only applies to Web devices which have a real Flask consumer running.
+    """Deliver alert to Pager systems."""
     time.sleep(0.1)
-    print(
-        f"[PAGER:SIM] Alert simulated for '{device_dict['name']}' (ID: {device_dict['id']})"
-    )
+    logger.info("Pager alert simulated for '%s' (ID: %s)", device_dict['name'], device_dict['id'])
     return {
         "device_id": device_dict["id"],
         "device_name": device_dict["name"],
@@ -231,63 +342,72 @@ DEVICE_HANDLERS = {
 }
 
 
+# ---------------------------------------------------------------------------
+# Job Processing with Bounded Concurrency & Transaction Safety
+# ---------------------------------------------------------------------------
+
 def process_job(job, app):
     """
-    Process a single notification job synchronously.
-    This is extracted from the infinite worker loop so it can be 
-    safely tested without spinning up background threads.
+    Process a single notification job with bounded thread pool dispatching,
+    safe database transactions, and real-time SSE broadcasts.
     """
     job_id = job["job_id"]
     title = job["title"]
     message = job["message"]
     target_devices = job["target_devices"]
 
-    print(f"\n[WORKER] Processing job {job_id}: '{title}' → {len(target_devices)} device(s)")
+    logger.info("Processing job %s: '%s' → %d device(s)", job_id, title, len(target_devices))
 
-    job_tracker[job_id]["status"] = "processing"
+    update_job_tracker(job_id, {"status": "processing"})
     broadcast_sse({"type": "job_processing", "job_id": job_id})
 
     results = []
-    threads = []
 
-    # 2. Loop through every device we need to send this to
-    for device_dict in target_devices:
-        # Pick the right delivery boy (Web, Mobile, or Pager)
-        handler = DEVICE_HANDLERS.get(
-            device_dict["device_type"], send_web_push
-        )
+    # Use bounded ThreadPoolExecutor to prevent OS thread exhaustion
+    num_workers = min(MAX_DISPATCH_THREADS, max(len(target_devices), 1))
+    with ThreadPoolExecutor(max_workers=num_workers) as executor:
+        future_map = {}
+        for device_dict in target_devices:
+            handler = DEVICE_HANDLERS.get(device_dict.get("device_type"), send_web_push)
+            future = executor.submit(handler, device_dict, title, message)
+            future_map[future] = device_dict
 
-        # We use mini-threads here so we can send to 100 devices at the EXACT SAME TIME,
-        # rather than waiting for device 1 to finish before messaging device 2.
-        def _dispatch(d=device_dict, h=handler):
-            result = h(d, title, message)
-            results.append(result)
+        for future in as_completed(future_map):
+            device_dict = future_map[future]
+            try:
+                result = future.result()
+                results.append(result)
+            except Exception as e:
+                logger.error("Exception during dispatch to %s: %s", device_dict.get("name"), e)
+                results.append({
+                    "device_id": device_dict.get("id"),
+                    "device_name": device_dict.get("name"),
+                    "device_type": device_dict.get("device_type", "web"),
+                    "status": "failed",
+                    "message": f"Internal execution error: {str(e)}",
+                })
 
-        t = threading.Thread(target=_dispatch)
-        threads.append(t)
-        t.start()
-
-    # Wait for all the mini-threads to finish sending
-    for t in threads:
-        t.join()
-
-    # 3. Count up the successes and failures
     successful = len([r for r in results if r["status"] == "success"])
     failed = len([r for r in results if r["status"] == "failed"])
 
-    # 4. Update the SQL Database with the final scores
+    # Update database with rollback protection
     with app.app_context():
-        notif = db.session.get(Notification, job_id)
-        if notif:
-            notif.processed_at = datetime.utcnow()
-            notif.successful = successful
-            notif.failed = failed
-            notif.status = "completed"
-            notif.details = json.dumps(results)
-            db.session.commit()
+        try:
+            notif = db.session.get(Notification, job_id)
+            if notif:
+                notif.processed_at = datetime.utcnow()
+                notif.successful = successful
+                notif.failed = failed
+                notif.status = "completed"
+                notif.details = json.dumps(results)
+                db.session.commit()
+        except Exception as db_err:
+            db.session.rollback()
+            logger.error("Database update error for job %s: %s", job_id, db_err)
 
-    # Update the fast RAM tracker
-    job_tracker[job_id].update(
+    # Update fast in-memory tracker
+    update_job_tracker(
+        job_id,
         {
             "status": "completed",
             "processed_at": datetime.now().isoformat(),
@@ -296,6 +416,7 @@ def process_job(job, app):
             "results": results,
         }
     )
+
     broadcast_sse({
         "type": "job_complete",
         "job_id": job_id,
@@ -304,37 +425,33 @@ def process_job(job, app):
         "failed": failed,
     })
 
-    print(f"[WORKER] Job {job_id} done — {successful} ok, {failed} failed")
+    logger.info("Job %s completed: %d ok, %d failed", job_id, successful, failed)
+
 
 def notification_worker(app):
-    """
-    Worker thread logic that pulls jobs from queue.
-    Think of a 'Worker Thread' as a mini-employee running in the background.
-    They sit in a loop forever, waiting for a job to appear in the 'notification_queue'.
-    """
+    """Background worker loop pulling jobs from the durable queue."""
     while True:
-        # 1. Grab the next job in line. This line "blocks" (pauses) until a job arrives.
-        job = notification_queue.get()
-        
         try:
-            process_job(job, app)
-        except Exception as e:
-            print(f"[WORKER] Error processing job: {e}")
-        finally:
-            # 5. Tell the queue "I am finished with this job!"
-            notification_queue.task_done()
+            job = notification_queue.get(block=True, timeout=2)
+            if job is None:
+                continue
 
+            try:
+                process_job(job, app)
+            except Exception as e:
+                logger.error("Error processing job %s: %s", job.get("job_id"), e)
+            finally:
+                notification_queue.task_done()
+        except Exception as ex:
+            logger.error("Worker exception: %s", ex)
+            time.sleep(1)
 
 
 def start_worker_pool(app):
-    """
-    Initialize and start the background worker pool.
-    We create 5 workers (from WORKER_POOL_SIZE). They run 'daemon=True', meaning
-    when you shut down the main Flask app, these workers die instantly.
-    """
+    """Start the pool of background worker threads."""
     for i in range(WORKER_POOL_SIZE):
         t = threading.Thread(
             target=notification_worker, args=(app,), daemon=True
         )
         t.start()
-    print(f"✓ Worker pool started ({WORKER_POOL_SIZE} workers)")
+    logger.info("Started background worker pool (%d worker threads)", WORKER_POOL_SIZE)

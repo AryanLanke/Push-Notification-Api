@@ -906,6 +906,15 @@
             return [...document.querySelectorAll('.device-chk:checked')].map(c => c.value);
         }
 
+        function getAuthHeaders(extraHeaders = {}) {
+            const key = localStorage.getItem('producer_api_key') || 'dev-secret-key-change-in-prod';
+            const headers = { ...extraHeaders };
+            if (key) {
+                headers['X-API-Key'] = key;
+            }
+            return headers;
+        }
+
         // ── Track state to prevent flickering ──
         let lastDeviceJson = "";
         let lastHistoryJson = "";
@@ -988,7 +997,7 @@
         async function deleteDevice(id, name) {
             if (!confirm(`Remove device "${name}"?`)) return;
             try {
-                const r = await fetch(`${API}/devices/${id}`, { method: 'DELETE' });
+                const r = await fetch(`${API}/devices/${id}`, { method: 'DELETE', headers: getAuthHeaders() });
                 if ((await r.json()).success) { loadDevices(); }
             } catch (e) { alert('Error removing device.'); }
         }
@@ -1011,7 +1020,7 @@
 
             try {
                 const r = await fetch(`${API}/notifications/send`, {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    method: 'POST', headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
                     body: JSON.stringify(body)
                 });
                 const data = await r.json();
@@ -1186,7 +1195,7 @@
 
             try {
                 const r = await fetch(`${API}/devices/register`, {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    method: 'POST', headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
                     body: JSON.stringify({ name, device_type: type, ip_address: ip, port: parseInt(port) })
                 });
                 const data = await r.json();

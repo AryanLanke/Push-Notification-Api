@@ -63,3 +63,17 @@ def test_receive_empty_data(client):
     data = json.loads(response.data)
     assert data["success"] is False
     assert "error" in data
+
+
+def test_sw_endpoint(client):
+    """Test Service Worker endpoint"""
+    response = client.get("/sw.js")
+    assert response.status_code == 200
+    assert "javascript" in response.headers["Content-Type"]
+    assert response.headers.get("Service-Worker-Allowed") == "/"
+
+
+def test_subscribe_missing_data(client):
+    """Test subscribe endpoint without subscription data"""
+    response = client.post("/subscribe", data=json.dumps({}), content_type="application/json")
+    assert response.status_code == 400

@@ -294,19 +294,20 @@ Step-by-step flow from a notification being requested to it being received:
 
 ### Producer Endpoints (Base URL: `http://localhost:5000`)
 
-| Method   | Endpoint                              | Description                                    |
-|----------|---------------------------------------|------------------------------------------------|
-| `GET`    | `/`                                   | Admin dashboard (web UI)                       |
-| `GET`    | `/api`                                | API discovery — lists all endpoints            |
-| `GET`    | `/events`                             | SSE stream for real-time dashboard updates     |
-| `GET`    | `/devices`                            | List all registered devices                    |
-| `POST`   | `/devices/register`                   | Register a new consumer device                 |
-| `DELETE` | `/devices/<device_id>`                | Unregister a device                            |
-| `POST`   | `/notifications/send`                 | Enqueue a notification for delivery            |
-| `GET`    | `/notifications/queue`                | View jobs currently queued or processing       |
-| `GET`    | `/notifications/status/<job_id>`      | Check status of a specific notification job    |
-| `GET`    | `/notifications/history`              | View last 50 sent notifications                |
-| `GET`    | `/vapid/public-key`                   | Get VAPID public key for web push subscription |
+| Method   | Endpoint                              | Authentication | Description                                    |
+|----------|---------------------------------------|----------------|------------------------------------------------|
+| `GET`    | `/health`                             | Public         | System health probe (DB & server status)       |
+| `GET`    | `/`                                   | Public         | Admin dashboard (web UI)                       |
+| `GET`    | `/api`                                | Public         | API discovery — lists all endpoints & status   |
+| `GET`    | `/events`                             | Public         | SSE stream for real-time dashboard updates     |
+| `GET`    | `/devices`                            | Public         | List all registered devices                    |
+| `POST`   | `/devices/register`                   | Public / Key   | Register a new consumer device                 |
+| `DELETE` | `/devices/<device_id>`                | Public / Key   | Unregister a device                            |
+| `POST`   | `/notifications/send`                 | `X-API-Key`    | Enqueue a notification for delivery            |
+| `GET`    | `/notifications/queue`                | Public         | View jobs currently queued or processing       |
+| `GET`    | `/notifications/status/<job_id>`      | Public         | Check status of a specific notification job    |
+| `GET`    | `/notifications/history`              | Public         | View last 50 sent notifications                |
+| `GET`    | `/vapid/public-key`                   | Public         | Get VAPID public key for web push subscription |
 
 ---
 
@@ -626,27 +627,30 @@ Build lightweight SDKs for Android (Kotlin/Java) and iOS (Swift) that handle dev
 Push-Notification-Api/
 │
 ├── producer/                   # Producer Service (Port 5000)
-│   ├── producer.py             # App factory, config, startup
-│   ├── models.py               # SQLAlchemy models (Device, Notification)
-│   ├── routes.py               # All REST API endpoints
-│   ├── services.py             # Worker pool, queue, push handlers
+│   ├── producer.py             # App factory, config, startup, WSGI entrypoint
+│   ├── database.py             # SQLAlchemy models & SQLite WAL / Postgres (alias: models.py)
+│   ├── endpoints.py            # REST API endpoints, auth, health check (alias: routes.py)
+│   ├── logic.py                # Worker pool, Redis durable queue, push handlers (alias: services.py)
 │   ├── templates/
 │   │   └── producer.html       # Admin dashboard UI
-│   ├── requirements.txt        # Python dependencies
-│   ├── Dockerfile              # Container definition
+│   ├── requirements.txt        # Python dependencies (includes redis, psycopg2, gunicorn, pytest)
+│   ├── Dockerfile              # Production container definition (Gunicorn WSGI)
 │   └── test_producer.py        # Pytest test suite
 │
 ├── consumer/                   # Consumer Service (Port 5001)
 │   ├── consumer.py             # Consumer app (receives & displays notifications)
+│   ├── static/
+│   │   └── sw.js               # Service Worker for native Web Push
 │   ├── templates/
-│   │   └── consumer.html       # Consumer dashboard UI
+│   │   └── consumer.html       # Consumer dashboard UI (with Web Push subscription button)
 │   ├── requirements.txt        # Python dependencies
 │   ├── Dockerfile              # Container definition
 │   └── test_consumer.py        # Pytest test suite
 │
-├── docker-compose.yml          # Runs both services together
+├── docker-compose.yml          # Multi-container orchestration (Redis, Postgres, Producer, Consumer)
+├── .env.example                # Example environment variables template
 ├── .gitignore
-└── README.md                   # This file
+└── README.md                   # System documentation
 ```
 
 ---

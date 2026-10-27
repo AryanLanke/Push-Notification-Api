@@ -1,20 +1,27 @@
-# Use an official Python runtime as a parent image
+# Official Python runtime
 FROM python:3.11-slim
 
-# Set the working directory in the container
+# Set working directory
 WORKDIR /app
 
-# Copy the requirements file into the container
-COPY requirements.txt .
+# Install system dependencies (for building if needed)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
 
-# Install any needed packages specified in requirements.txt
+# Install python dependencies
+COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy the rest of the application code
+# Copy application files
 COPY . .
 
-# Make port 5000 available to the world outside this container
+# Expose producer port
 EXPOSE 5000
 
-# Run app.py when the container launches
-CMD ["python", "producer.py"]
+# Health check
+HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
+  CMD curl -f http://localhost:5000/health || exit 1
+
+# Run with Gunicorn WSGI for production reliability (multi-threaded)
+CMD ["gunicorn", "--workers", "1", "--threads", "8", "--bind", "0.0.0.0:5000", "producer:app"]

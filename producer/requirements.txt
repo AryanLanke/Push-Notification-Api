@@ -5,3 +5,7 @@ pywebpush>=2.0.0
 py-vapid>=1.9.0
 python-dotenv>=1.0.0
 requests>=2.28.0
+redis>=4.5.0
+psycopg2-binary>=2.9.6
+gunicorn>=21.0.0
+pytest>=7.0.0
