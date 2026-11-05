@@ -1,0 +1,885 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Relay — Dispatch Console (mockup)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  /* ══════════════════════════════════════════════════════════════
+     DIRECTION 01 — INSTRUMENT PANEL
+     Warm paper, near-black rail, hairline rules, one burnt accent.
+     No shadows, no gradients, no emoji, no pill radii.
+  ══════════════════════════════════════════════════════════════ */
+  :root{
+    --paper:#F4F3EE;
+    --surface:#FBFAF6;
+    --surface-2:#F7F6F0;
+    --rail:#17191B;
+    --rail-2:#1F2224;
+    --rail-line:#2C3033;
+    --ink:#15171A;
+    --ink-2:#3D4147;
+    --muted:#767A7B;
+    --faint:#A3A6A3;
+    --line:#E2E0D6;
+    --line-soft:#EDEBE2;
+    --line-strong:#CFCCC1;
+    --accent:#BE4527;
+    --accent-dark:#A0381F;
+    --ok:#1C6B56;
+    --warn:#9A6812;
+    --bad:#A32E24;
+    --queued:#6C7580;
+    --mono:"IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    --sans:"Archivo","Helvetica Neue",Arial,sans-serif;
+    --r:2px;
+    --rail-w:232px;
+  }
+
+  *{margin:0;padding:0;box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  body{
+    font-family:var(--sans);
+    background:var(--paper);
+    color:var(--ink);
+    -webkit-font-smoothing:antialiased;
+    font-size:13px;
+    line-height:1.45;
+  }
+  a{color:inherit;text-decoration:none}
+  button{font-family:inherit;font-size:inherit;color:inherit;background:none;border:0;cursor:pointer}
+  ::selection{background:#EFD9CF}
+
+  /* ── shell ── */
+  .app{display:grid;grid-template-columns:var(--rail-w) minmax(0,1fr);min-height:100vh}
+  .rail{
+    background:var(--rail);color:#C6C3BA;
+    position:sticky;top:0;height:100vh;
+    display:flex;flex-direction:column;
+    padding:18px 0 14px;
+  }
+  .brand{display:flex;align-items:center;gap:10px;padding:0 18px 22px;border-bottom:1px solid var(--rail-line);margin-bottom:14px}
+  .brand svg{flex:0 0 auto;color:var(--accent)}
+  .brand .name{font-size:15px;font-weight:600;letter-spacing:.01em;color:#F3F1E9;line-height:1.1}
+  .brand .caption{font-family:var(--mono);font-size:8.5px;letter-spacing:.16em;text-transform:uppercase;color:#7E827E;margin-top:4px}
+
+  .nav-label{font-family:var(--mono);font-size:8.5px;letter-spacing:.16em;text-transform:uppercase;color:#6B6F6E;padding:0 18px;margin:14px 0 8px}
+  .navitem{
+    display:flex;align-items:center;gap:11px;
+    padding:8px 18px 8px 16px;
+    border-left:2px solid transparent;
+    font-size:12.5px;color:#A5A8A3;
+  }
+  .navitem svg{opacity:.75}
+  .navitem:hover{background:var(--rail-2);color:#EFEDE5}
+  .navitem.active{border-left-color:var(--accent);background:var(--rail-2);color:#F6F4EC}
+  .navitem.active svg{opacity:1;color:var(--accent)}
+  .navitem .tag{
+    margin-left:auto;font-family:var(--mono);font-size:9px;letter-spacing:.06em;
+    color:#8E918C;border:1px solid var(--rail-line);padding:1px 4px;border-radius:var(--r);
+  }
+  .navitem.off{color:#636764;cursor:default}
+  .navitem.off:hover{background:transparent;color:#636764}
+
+  .rail-foot{margin-top:auto;padding:14px 18px 0;border-top:1px solid var(--rail-line)}
+  .rail-foot .row{display:flex;justify-content:space-between;gap:8px;font-family:var(--mono);font-size:9.5px;color:#7D817D;line-height:2}
+  .rail-foot .row b{font-weight:400;color:#B9BBB4}
+  .rail-foot .stamp{margin-top:12px;font-family:var(--mono);font-size:8.5px;letter-spacing:.12em;text-transform:uppercase;color:#5F6360;line-height:1.7}
+
+  /* ── top bar ── */
+  .main{min-width:0;display:flex;flex-direction:column}
+  .topbar{
+    display:flex;align-items:center;gap:14px;
+    padding:13px 28px;border-bottom:1px solid var(--line);
+    background:rgba(244,243,238,.94);backdrop-filter:blur(8px);
+    position:sticky;top:0;z-index:30;
+  }
+  .crumb{font-family:var(--mono);font-size:10.5px;letter-spacing:.04em;color:var(--faint);display:flex;align-items:center;gap:7px}
+  .crumb b{color:var(--ink);font-weight:500}
+  .crumb .sep{color:var(--line-strong)}
+  .topbar .grow{flex:1}
+  .search{
+    display:flex;align-items:center;gap:8px;
+    border:1px solid var(--line);background:var(--surface);
+    height:30px;padding:0 9px;min-width:240px;border-radius:var(--r);
+    color:var(--muted);
+  }
+  .search input{border:0;background:none;outline:none;font-family:var(--mono);font-size:10.5px;width:100%;color:var(--ink)}
+  .search kbd{font-family:var(--mono);font-size:9px;color:var(--faint);border:1px solid var(--line);padding:1px 4px;border-radius:var(--r)}
+
+  .chip{
+    display:inline-flex;align-items:center;gap:6px;
+    font-family:var(--mono);font-size:9px;letter-spacing:.12em;text-transform:uppercase;
+    padding:4px 7px;border:1px solid var(--line);background:var(--surface);border-radius:var(--r);
+    color:var(--ink-2);white-space:nowrap;
+  }
+  .chip i{width:5px;height:5px;display:block;background:currentColor}
+  .chip.ok{color:var(--ok);border-color:#CFDDD6}
+  .chip.warn{color:var(--warn);border-color:#E3D7BC}
+  .chip.bad{color:var(--bad);border-color:#E2C8C4}
+  .chip.queued{color:var(--queued)}
+  .chip.live i{animation:blink 2.4s ease-in-out infinite}
+  @keyframes blink{0%,100%{opacity:1}50%{opacity:.25}}
+
+  .btn{
+    display:inline-flex;align-items:center;justify-content:center;gap:7px;
+    height:31px;padding:0 13px;border-radius:var(--r);
+    font-size:12px;font-weight:500;letter-spacing:.01em;white-space:nowrap;
+    border:1px solid var(--line-strong);background:var(--surface);color:var(--ink);
+    transition:background .12s ease, border-color .12s ease, color .12s ease;
+  }
+  .btn:hover{background:var(--surface-2);border-color:var(--ink-2)}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:#FCF8F5}
+  .btn.primary:hover{background:var(--accent-dark);border-color:var(--accent-dark)}
+  .btn.ghost{background:transparent;border-color:transparent;color:var(--ink-2);padding:0 8px}
+  .btn.ghost:hover{background:var(--surface-2);border-color:transparent;color:var(--ink)}
+  .btn.sm{height:26px;padding:0 9px;font-size:11px}
+
+  /* ── layout ── */
+  .view{display:block}
+  .view[hidden]{display:none}
+  .body{padding:22px 28px 48px;max-width:1560px}
+  .body > * + *{margin-top:16px}
+
+  .page-head{display:flex;align-items:flex-end;justify-content:space-between;gap:24px;padding-bottom:14px;border-bottom:1px solid var(--line)}
+  .page-head h1{font-size:21px;font-weight:600;letter-spacing:-.015em;line-height:1.2}
+  .page-head p{font-family:var(--mono);font-size:10.5px;color:var(--muted);margin-top:6px;letter-spacing:.02em}
+  .page-head .right{display:flex;align-items:center;gap:8px}
+
+  /* KPI strip */
+  .kpis{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));border:1px solid var(--line);background:var(--surface)}
+  .kpi{padding:14px 16px 13px;border-left:1px solid var(--line);min-width:0}
+  .kpi:first-child{border-left:0}
+  .kpi .lab{font-family:var(--mono);font-size:8.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);display:flex;align-items:center;gap:6px}
+  .kpi .lab .mark{width:4px;height:4px;background:var(--line-strong)}
+  .kpi .num{
+    font-family:var(--mono);font-size:28px;font-weight:500;letter-spacing:-.035em;
+    line-height:1.05;margin-top:9px;font-variant-numeric:tabular-nums;
+  }
+  .kpi .num small{font-size:13px;letter-spacing:0;color:var(--muted);font-weight:400}
+  .kpi .foot{font-family:var(--mono);font-size:9.5px;color:var(--faint);margin-top:7px;letter-spacing:.02em}
+  .kpi .foot .up{color:var(--ok)}
+
+  /* panels */
+  .grid{display:grid;grid-template-columns:1.62fr 1fr;gap:16px;align-items:start}
+  .grid.two{grid-template-columns:1fr 1fr}
+  .grid.split{grid-template-columns:1.45fr 1fr}
+  .panel{background:var(--surface);border:1px solid var(--line);min-width:0}
+  .panel-h{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 16px;border-bottom:1px solid var(--line)}
+  .panel-h h2{font-size:12.5px;font-weight:600;letter-spacing:.005em}
+  .panel-h .meta{font-family:var(--mono);font-size:9.5px;color:var(--faint);letter-spacing:.04em}
+  .panel-h .tools{display:flex;align-items:center;gap:10px}
+  .panel-b{padding:16px}
+  .panel-b.flush{padding:0;overflow-x:auto}
+
+  .seg{display:inline-flex;border:1px solid var(--line);border-radius:var(--r);overflow:hidden;background:var(--surface)}
+  .seg button{font-family:var(--mono);font-size:9.5px;letter-spacing:.08em;padding:4px 8px;color:var(--muted);border-left:1px solid var(--line)}
+  .seg button:first-child{border-left:0}
+  .seg button:hover{background:var(--surface-2);color:var(--ink)}
+  .seg button[aria-pressed="true"]{background:var(--ink);color:#F7F5EE}
+
+  /* chart */
+  .chart{display:flex;gap:10px}
+  .yaxis{display:flex;flex-direction:column;justify-content:space-between;font-family:var(--mono);font-size:8.5px;color:var(--faint);padding:2px 0 18px}
+  .plot{flex:1;min-width:0}
+  .plot svg{display:block;width:100%;height:auto}
+  .xaxis{display:flex;justify-content:space-between;font-family:var(--mono);font-size:8.5px;color:var(--faint);letter-spacing:.04em;padding-top:7px;border-top:1px solid var(--line-soft);margin-top:-1px}
+  .legend{display:flex;align-items:center;gap:16px;font-family:var(--mono);font-size:9px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding:0 16px 12px}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .swatch-line{width:14px;height:2px;background:var(--ink)}
+  .swatch-line.b{background:var(--accent)}
+  .swatch-line.d{background:var(--line-strong)}
+
+  /* worker rows */
+  .worker{display:grid;grid-template-columns:52px 1fr 74px;gap:10px;align-items:center;padding:10px 16px;border-bottom:1px solid var(--line-soft)}
+  .worker:last-child{border-bottom:0}
+  .worker .id{font-family:var(--mono);font-size:10.5px;color:var(--ink)}
+  .worker .job{font-family:var(--mono);font-size:9.5px;color:var(--muted);margin-top:3px;letter-spacing:.02em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .worker .bar{height:3px;background:var(--line-soft);margin-top:6px;position:relative;overflow:hidden;max-width:190px}
+  .worker .bar b{position:absolute;inset:0 auto 0 0;background:var(--ink)}
+  .worker .bar b.hot{background:var(--accent)}
+  .worker .state{text-align:right}
+
+  /* tables */
+  table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+  thead th{
+    font-family:var(--mono);font-size:8.5px;font-weight:500;letter-spacing:.12em;text-transform:uppercase;
+    color:var(--muted);text-align:left;padding:8px 16px;background:var(--surface-2);
+    border-bottom:1px solid var(--line);white-space:nowrap;
+  }
+  tbody td{padding:0 16px;height:44px;border-bottom:1px solid var(--line-soft);font-size:12.5px;color:var(--ink-2);vertical-align:middle;white-space:nowrap}
+  tbody tr:last-child td{border-bottom:0}
+  tbody tr:hover td{background:var(--surface-2)}
+  td.mono,th.mono{font-family:var(--mono);font-size:10.5px;letter-spacing:.01em;color:var(--muted)}
+  td .title{color:var(--ink);font-weight:500;display:block;white-space:normal}
+  td .sub{font-family:var(--mono);font-size:9.5px;color:var(--faint);margin-top:2px}
+  .num-r{text-align:right}
+  .topic{
+    font-family:var(--mono);font-size:9.5px;letter-spacing:.02em;color:var(--ink-2);
+    border:1px solid var(--line);padding:2px 5px;border-radius:var(--r);background:var(--surface);
+  }
+  .meter{display:flex;align-items:center;gap:7px}
+  .meter .track{width:52px;height:3px;background:var(--line-soft);position:relative}
+  .meter .track b{position:absolute;inset:0 auto 0 0;background:var(--ink)}
+  .meter .track b.bad{background:var(--bad)}
+  .meter .track b.ok{background:var(--ok)}
+  .meter span{font-family:var(--mono);font-size:10px;color:var(--muted)}
+  .tbl-tools{display:flex;align-items:center;gap:8px}
+  .link{font-family:var(--mono);font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--accent);border-bottom:1px solid #E3C3B8;padding-bottom:1px}
+  .link:hover{border-bottom-color:var(--accent)}
+
+  .foot-note{font-family:var(--mono);font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);padding:8px 16px;border-top:1px solid var(--line-soft);display:flex;justify-content:space-between;gap:12px;background:var(--surface)}
+
+  /* form */
+  .field{margin-bottom:13px}
+  .field > label{display:block;font-family:var(--mono);font-size:8.5px;letter-spacing:.13em;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
+  input[type=text], input[type=number], input[type=datetime-local], textarea, select{
+    width:100%;border:1px solid var(--line-strong);background:#FFFEFB;border-radius:var(--r);
+    font-family:var(--sans);font-size:13px;color:var(--ink);padding:0 10px;height:33px;outline:none;
+    transition:border-color .12s ease;
+  }
+  textarea{height:auto;padding:9px 10px;resize:vertical;line-height:1.5}
+  input:focus, textarea:focus, select:focus{border-color:var(--ink)}
+  .hint{font-family:var(--mono);font-size:9.5px;color:var(--faint);margin-top:5px;letter-spacing:.02em}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .target{display:grid;grid-template-columns:repeat(3,1fr);border:1px solid var(--line-strong);background:#FFFEFB;border-radius:var(--r);overflow:hidden}
+  .target button{padding:7px 8px;font-family:var(--mono);font-size:9.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);border-left:1px solid var(--line);text-align:center}
+  .target button:first-child{border-left:0}
+  .target button[aria-pressed="true"]{background:var(--ink);color:#F7F5EE}
+
+  .devpick{border:1px solid var(--line);background:#FFFEFB;max-height:150px;overflow:auto}
+  .devpick label{display:flex;align-items:center;gap:9px;padding:8px 11px;border-bottom:1px solid var(--line-soft);font-size:12px;cursor:pointer}
+  .devpick label:last-child{border-bottom:0}
+  .devpick label:hover{background:var(--surface-2)}
+  input[type=checkbox]{accent-color:var(--ink);width:13px;height:13px;margin:0}
+  .devpick .meta{margin-left:auto;font-family:var(--mono);font-size:9.5px;color:var(--faint)}
+
+  .form-foot{display:flex;align-items:center;gap:10px;margin-top:20px;padding-top:16px;border-top:1px solid var(--line)}
+  .form-foot .hint{margin:0 0 0 auto;text-align:right}
+
+  /* preview card */
+  .pushcard{border:1px solid var(--line);background:#FFFEFB;padding:13px 14px;border-radius:3px;border-left:2px solid var(--accent)}
+  .pushcard .top{display:flex;align-items:center;gap:7px;font-family:var(--mono);font-size:8.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+  .pushcard h3{font-size:13.5px;font-weight:600;margin:9px 0 4px;letter-spacing:-.005em}
+  .pushcard p{font-size:12px;color:var(--ink-2);line-height:1.5}
+
+  pre.json{
+    background:var(--rail);color:#D7D4CA;border-radius:var(--r);
+    padding:13px;font-family:var(--mono);font-size:10.5px;line-height:1.75;overflow:auto;
+    border:1px solid #24282A;
+  }
+  pre.json .k{color:#9DB8B0}
+  pre.json .s{color:#D9A98E}
+  pre.json .p{color:#7C807C}
+  pre.json .n{color:#B9B9A5}
+
+  .kv{display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-bottom:1px solid var(--line-soft);font-size:12px}
+  .kv:last-child{border-bottom:0}
+  .kv span{color:var(--muted)}
+  .kv b{font-family:var(--mono);font-size:10.5px;font-weight:400;color:var(--ink)}
+
+  .filter-row{display:flex;align-items:center;gap:8px;padding:11px 16px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+  .fchip{font-family:var(--mono);font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);padding:3px 7px;border-radius:var(--r);border:1px solid transparent}
+  .fchip:hover{background:var(--surface-2);color:var(--ink)}
+  .fchip[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:#F7F5EE}
+  .fchip .n{color:var(--faint);margin-left:4px}
+  .fchip[aria-pressed="true"] .n{color:#B9B7AE}
+
+  @media (max-width:1040px){
+    .grid.split{grid-template-columns:1fr}
+    .kpis{grid-template-columns:repeat(2,1fr)}
+    .kpi{border-left:1px solid var(--line)}
+    .kpi:nth-child(odd){border-left:0}
+    .kpi:nth-child(n+3){border-top:1px solid var(--line)}
+    .grid{grid-template-columns:1fr}
+  }
+  @media (max-width:860px){
+    :root{--rail-w:0px}
+    .app{grid-template-columns:1fr}
+    .rail{
+      position:static;height:auto;flex-direction:row;align-items:center;
+      gap:2px;padding:9px 12px;overflow-x:auto;
+      scrollbar-width:none;
+    }
+    .rail::-webkit-scrollbar{display:none}
+    .brand{padding:0 12px 0 0;margin:0;border-bottom:0;border-right:1px solid var(--rail-line);flex:0 0 auto}
+    .brand .caption{display:none}
+    .nav-label,.rail-foot{display:none}
+    .navitem{padding:7px 10px;border-left:0;border-bottom:2px solid transparent;flex:0 0 auto}
+    .navitem.active{border-left:0;border-bottom-color:var(--accent);background:transparent}
+    .navitem .tag{display:none}
+    .body{padding:16px 14px 40px}
+    .topbar{padding:11px 14px;flex-wrap:nowrap;gap:8px}
+    .topbar .grow{display:none}
+    .topbar .search{display:none}
+    .topbar .chip.ok.live{display:none}
+    .topbar .crumb{flex:1}
+    .kpis{grid-template-columns:1fr}
+    .kpi{border-left:0;border-top:1px solid var(--line)}
+    .kpi:first-child{border-top:0}
+    .page-head{flex-direction:column;align-items:flex-start;gap:12px}
+    .page-head p{white-space:normal}
+    .row2{grid-template-columns:1fr}
+    .form-foot{flex-wrap:wrap}
+    .form-foot .hint{margin:0;text-align:left;width:100%}
+  }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- ════════ RAIL ════════ -->
+  <aside class="rail">
+    <div class="brand">
+      <svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path d="M3 6h11M3 11h16M3 16h8"/>
+        <circle cx="17.5" cy="6" r="1.6" fill="currentColor" stroke="none"/>
+      </svg>
+      <div>
+        <div class="name">relay</div>
+        <div class="caption">dispatch console</div>
+      </div>
+    </div>
+
+    <div class="nav-label">Workspace</div>
+    <a class="navitem active" href="#" data-nav="overview">
+      <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="2" y="2" width="5" height="5"/><rect x="9" y="2" width="5" height="5"/><rect x="2" y="9" width="5" height="5"/><rect x="9" y="9" width="5" height="5"/></svg>
+      Overview
+    </a>
+    <a class="navitem" href="#" data-nav="compose">
+      <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M14 2 2 7l4.5 1.8L8 14z"/><path d="M14 2 6.5 8.8"/></svg>
+      Compose
+    </a>
+    <a class="navitem" href="#" data-nav="devices">
+      <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="1.5" y="2.5" width="13" height="8.5"/><path d="M5.5 14h5M8 11v3"/></svg>
+      Devices
+      <span class="tag">4</span>
+    </a>
+
+    <div class="nav-label">Delivery</div>
+    <a class="navitem off" href="#" aria-disabled="true" title="Out of scope for this mockup">
+      <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M2 4h12M2 8h12M2 12h7"/></svg>
+      Queue &amp; DLQ
+      <span class="tag">12</span>
+    </a>
+    <a class="navitem off" href="#" aria-disabled="true" title="Out of scope for this mockup">
+      <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="8" cy="8" r="6"/><path d="M8 4.5V8l2.5 1.5"/></svg>
+      History
+    </a>
+    <a class="navitem off" href="#" aria-disabled="true" title="Out of scope for this mockup">
+      <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M2.5 13V9M8 13V4M13.5 13V6.5"/></svg>
+      Metrics
+    </a>
+
+    <div class="rail-foot">
+      <div class="row"><span>env</span><b>local</b></div>
+      <div class="row"><span>workers</span><b>5 / 5</b></div>
+      <div class="row"><span>api key</span><b>••••••••</b></div>
+      <div class="stamp">mockup · direction 01<br>demo data, no backend</div>
+    </div>
+  </aside>
+
+  <!-- ════════ MAIN ════════ -->
+  <div class="main">
+    <header class="topbar">
+      <div class="crumb"><span>producer</span><span class="sep">/</span><b id="crumbNow">overview</b></div>
+      <div class="grow"></div>
+      <div class="search">
+        <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5 14 14"/></svg>
+        <input placeholder="search jobs, devices, topics" aria-label="Search">
+        <kbd>⌘K</kbd>
+      </div>
+      <span class="chip ok live"><i></i>SSE live</span>
+      <button class="btn primary" data-nav="compose">
+        <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M8 3v10M3 8h10"/></svg>
+        New notification
+      </button>
+    </header>
+
+    <!-- ══════════ OVERVIEW ══════════ -->
+    <section class="view" id="view-overview">
+      <div class="body">
+        <div class="page-head">
+          <div>
+            <h1>Overview</h1>
+            <p>localhost:5000 · queue redis/local · window last 24h</p>
+          </div>
+          <div class="right">
+            <div class="seg" role="group" aria-label="Time range">
+              <button aria-pressed="false">1h</button>
+              <button aria-pressed="false">6h</button>
+              <button aria-pressed="true">24h</button>
+              <button aria-pressed="false">7d</button>
+            </div>
+            <button class="btn sm">Export</button>
+          </div>
+        </div>
+
+        <!-- KPI strip -->
+        <div class="kpis">
+          <div class="kpi">
+            <div class="lab"><span class="mark"></span>Delivered</div>
+            <div class="num">128,430</div>
+            <div class="foot"><span class="up">▲ 12.4%</span> vs yesterday</div>
+          </div>
+          <div class="kpi">
+            <div class="lab"><span class="mark"></span>Success rate</div>
+            <div class="num">99.2<small>%</small></div>
+            <div class="foot">1,038 retried · 3 dropped</div>
+          </div>
+          <div class="kpi">
+            <div class="lab"><span class="mark"></span>Queue depth</div>
+            <div class="num">12</div>
+            <div class="foot">oldest 0.4s · 5 workers</div>
+          </div>
+          <div class="kpi">
+            <div class="lab"><span class="mark"></span>p50 latency</div>
+            <div class="num">41<small>ms</small></div>
+            <div class="foot">p95 128 ms · p99 310 ms</div>
+          </div>
+          <div class="kpi">
+            <div class="lab"><span class="mark"></span>Failed / DLQ</div>
+            <div class="num" style="color:var(--bad)">3</div>
+            <div class="foot"><a class="link" href="#">Review queue</a></div>
+          </div>
+        </div>
+
+        <div class="grid">
+          <!-- throughput -->
+          <div class="panel">
+            <div class="panel-h">
+              <h2>Delivery throughput</h2>
+              <div class="meta">events / 30 min</div>
+            </div>
+            <div class="panel-b">
+              <div class="chart">
+                <div class="yaxis"><span>4k</span><span>3k</span><span>2k</span><span>1k</span><span>0</span></div>
+                <div class="plot">
+                  <svg viewBox="0 0 720 208" preserveAspectRatio="none" aria-label="Throughput chart">
+                    <g stroke="#EDEBE2" stroke-width="1">
+                      <line x1="0" y1="8" x2="720" y2="8"/>
+                      <line x1="0" y1="54" x2="720" y2="54"/>
+                      <line x1="0" y1="100" x2="720" y2="100"/>
+                      <line x1="0" y1="146" x2="720" y2="146"/>
+                      <line x1="0" y1="192" x2="720" y2="192"/>
+                    </g>
+                    <path d="M0,150 C55,143 92,96 140,101 C188,106 214,66 268,72 C322,78 350,104 402,93 C454,82 480,46 534,54 C588,62 614,74 662,62 C690,55 706,46 720,41 L720,192 L0,192 Z" fill="#15171A" fill-opacity="0.055"/>
+                    <path d="M0,150 C55,143 92,96 140,101 C188,106 214,66 268,72 C322,78 350,104 402,93 C454,82 480,46 534,54 C588,62 614,74 662,62 C690,55 706,46 720,41" fill="none" stroke="#15171A" stroke-width="1.6"/>
+                    <path d="M0,178 C60,175 90,168 140,171 C190,174 220,160 270,164 C320,168 352,158 402,161 C452,164 486,150 536,154 C586,158 618,148 668,151 C696,153 710,148 720,146" fill="none" stroke="#BE4527" stroke-width="1.2" stroke-dasharray="3 3"/>
+                    <line x1="534" y1="8" x2="534" y2="192" stroke="#CFCCC1" stroke-width="1" stroke-dasharray="2 3"/>
+                    <circle cx="534" cy="54" r="2.6" fill="#15171A"/>
+                  </svg>
+                  <div class="xaxis"><span>00:00</span><span>04:00</span><span>08:00</span><span>12:00</span><span>16:00</span><span>20:00</span><span>now</span></div>
+                </div>
+              </div>
+            </div>
+            <div class="legend">
+              <span><i class="swatch-line"></i>Delivered</span>
+              <span><i class="swatch-line b"></i>Retries</span>
+              <span style="margin-left:auto">Peak 3,180 / 30 min</span>
+            </div>
+          </div>
+
+          <!-- workers -->
+          <div class="panel">
+            <div class="panel-h">
+              <h2>Worker pool</h2>
+              <div class="meta">5 threads</div>
+            </div>
+            <div class="panel-b flush">
+              <div class="worker">
+                <div class="id">w-01</div>
+                <div><div class="job">f4a1c2d3 · #billing</div><div class="bar"><b style="width:82%"></b></div></div>
+                <div class="state"><span class="chip queued">busy</span></div>
+              </div>
+              <div class="worker">
+                <div class="id">w-02</div>
+                <div><div class="job">9c07be51 · #orders</div><div class="bar"><b style="width:64%"></b></div></div>
+                <div class="state"><span class="chip queued">busy</span></div>
+              </div>
+              <div class="worker">
+                <div class="id">w-03</div>
+                <div><div class="job">idle · waiting on queue</div><div class="bar"><b style="width:11%;background:#CFCCC1"></b></div></div>
+                <div class="state"><span class="chip ok">ready</span></div>
+              </div>
+              <div class="worker">
+                <div class="id">w-04</div>
+                <div><div class="job">2bd91f0a · #alerts</div><div class="bar"><b class="hot" style="width:47%"></b></div></div>
+                <div class="state"><span class="chip queued">busy</span></div>
+              </div>
+              <div class="worker">
+                <div class="id">w-05</div>
+                <div><div class="job">idle · waiting on queue</div><div class="bar"><b style="width:8%;background:#CFCCC1"></b></div></div>
+                <div class="state"><span class="chip ok">ready</span></div>
+              </div>
+            </div>
+            <div class="foot-note"><span>uptime 6h 12m · 0 restarts</span><span>pool 100%</span></div>
+          </div>
+
+          <!-- live jobs -->
+          <div class="panel" style="grid-column:1/-1">
+            <div class="panel-h">
+              <h2>Live jobs</h2>
+              <div class="tools">
+                <div class="seg" role="group" aria-label="Filter">
+                  <button aria-pressed="true">All</button>
+                  <button aria-pressed="false">Active</button>
+                  <button aria-pressed="false">Failed</button>
+                </div>
+                <a class="link" href="#">View all</a>
+              </div>
+            </div>
+            <div class="panel-b flush">
+              <table>
+                <thead>
+                  <tr>
+                    <th style="width:84px">Job</th>
+                    <th style="min-width:240px">Title</th>
+                    <th style="width:92px">Target</th>
+                    <th style="width:118px">Result</th>
+                    <th style="width:108px">Status</th>
+                    <th class="num-r" style="width:82px">Latency</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td class="mono">f4a1c2d3</td>
+                    <td><span class="title">Transaction approved — ₹5,000 debited</span><div class="sub">webpush · 4 devices</div></td>
+                    <td><span class="topic">#billing</span></td>
+                    <td><div class="meter"><div class="track"><b class="ok" style="width:100%"></b></div><span>4/4</span></div></td>
+                    <td><span class="chip ok"><i></i>delivered</span></td>
+                    <td class="mono num-r">41 ms</td>
+                  </tr>
+                  <tr>
+                    <td class="mono">9c07be51</td>
+                    <td><span class="title">Order #48213 shipped</span><div class="sub">http · 2 devices</div></td>
+                    <td><span class="topic">#orders</span></td>
+                    <td><div class="meter"><div class="track"><b class="ok" style="width:100%"></b></div><span>2/2</span></div></td>
+                    <td><span class="chip ok"><i></i>delivered</span></td>
+                    <td class="mono num-r">38 ms</td>
+                  </tr>
+                  <tr>
+                    <td class="mono">2bd91f0a</td>
+                    <td><span class="title">Disk usage 91% on node-3</span><div class="sub">http · 3 devices</div></td>
+                    <td><span class="topic">#alerts</span></td>
+                    <td><div class="meter"><div class="track"><b class="ok" style="width:100%"></b></div><span>3/3</span></div></td>
+                    <td><span class="chip ok"><i></i>delivered</span></td>
+                    <td class="mono num-r">44 ms</td>
+                  </tr>
+                  <tr>
+                    <td class="mono">7ae0c4ff</td>
+                    <td><span class="title">Nightly digest — 12 subscribers</span><div class="sub">broadcast · all devices</div></td>
+                    <td><span class="topic">all</span></td>
+                    <td><div class="meter"><div class="track"><b style="width:75%"></b></div><span>9/12</span></div></td>
+                    <td><span class="chip warn live"><i></i>processing</span></td>
+                    <td class="mono num-r">—</td>
+                  </tr>
+                  <tr>
+                    <td class="mono">1c58d7b2</td>
+                    <td><span class="title">Pager test — acknowledge to clear</span><div class="sub">pager · attempt 2 of 5</div></td>
+                    <td><span class="topic">#alerts</span></td>
+                    <td><div class="meter"><div class="track"><b style="width:0%"></b></div><span>0/1</span></div></td>
+                    <td><span class="chip warn"><i></i>retrying</span></td>
+                    <td class="mono num-r">510 ms</td>
+                  </tr>
+                  <tr>
+                    <td class="mono">e30fa6c1</td>
+                    <td><span class="title">Invoice #INV-2291 paid</span><div class="sub">moved to dead-letter queue</div></td>
+                    <td><span class="topic">#billing</span></td>
+                    <td><div class="meter"><div class="track"><b class="bad" style="width:100%"></b></div><span>0/2</span></div></td>
+                    <td><span class="chip bad"><i></i>failed</span></td>
+                    <td class="mono num-r">—</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="foot-note"><span>Streaming via SSE · auto-updates, no refresh</span><span>GET /notifications/history</span></div>
+          </div>
+
+          <!-- device fleet -->
+          <div class="panel" style="grid-column:1/-1">
+            <div class="panel-h">
+              <h2>Device fleet</h2>
+              <div class="tools">
+                <span class="meta">4 registered · 1 push-active</span>
+                <button class="btn sm">Register device</button>
+              </div>
+            </div>
+            <div class="panel-b flush">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Device</th>
+                    <th style="width:90px">Type</th>
+                    <th style="width:110px">Channel</th>
+                    <th style="width:190px">Endpoint</th>
+                    <th style="width:110px">Push</th>
+                    <th style="width:120px">Last seen</th>
+                    <th class="num-r" style="width:90px">24h sent</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><span class="title">ops-oncall-macbook</span><div class="sub">8f3a4c21</div></td>
+                    <td>web</td>
+                    <td><span class="topic">#alerts</span></td>
+                    <td class="mono">127.0.0.1:5001</td>
+                    <td><span class="chip ok"><i></i>active</span></td>
+                    <td class="mono">12 s ago</td>
+                    <td class="mono num-r">2,418</td>
+                  </tr>
+                  <tr>
+                    <td><span class="title">prod-web-console</span><div class="sub">c17b09df</div></td>
+                    <td>web</td>
+                    <td><span class="topic">#general</span></td>
+                    <td class="mono">127.0.0.1:5002</td>
+                    <td><span class="chip ok"><i></i>active</span></td>
+                    <td class="mono">1 m ago</td>
+                    <td class="mono num-r">1,902</td>
+                  </tr>
+                  <tr>
+                    <td><span class="title">billing-service</span><div class="sub">44ae7b10</div></td>
+                    <td>mobile</td>
+                    <td><span class="topic">#billing</span></td>
+                    <td class="mono">fcm:…k92Q</td>
+                    <td><span class="chip queued"><i></i>token</span></td>
+                    <td class="mono">3 m ago</td>
+                    <td class="mono num-r">806</td>
+                  </tr>
+                  <tr>
+                    <td><span class="title">pager-gateway-01</span><div class="sub">02bf5e7a</div></td>
+                    <td>pager</td>
+                    <td><span class="topic">#alerts</span></td>
+                    <td class="mono">sms-gw:…118</td>
+                    <td><span class="chip bad"><i></i>none</span></td>
+                    <td class="mono">22 m ago</td>
+                    <td class="mono num-r">134</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="foot-note"><span>Topics route a job to every device tagged with the channel</span><span>GET /devices</span></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══════════ COMPOSE ══════════ -->
+    <section class="view" id="view-compose" hidden>
+      <div class="body">
+        <div class="page-head">
+          <div>
+            <h1>Compose</h1>
+            <p>POST /notifications/send · idempotent by key · queued, never sent inline</p>
+          </div>
+          <div class="right">
+            <span class="chip ok"><i></i>api key valid</span>
+          </div>
+        </div>
+
+        <div class="grid split">
+          <div class="panel">
+            <div class="panel-h"><h2>New notification</h2><div class="meta">draft</div></div>
+            <div class="panel-b">
+              <div class="field">
+                <label for="c-title">Title</label>
+                <input id="c-title" type="text" value="Disk usage 91% on node-3">
+              </div>
+              <div class="field">
+                <label for="c-msg">Message</label>
+                <textarea id="c-msg" rows="4">Free space is below the 5 GB threshold. Prune old build artefacts or expand the volume.</textarea>
+              </div>
+              <div class="field">
+                <label>Delivery target</label>
+                <div class="target" role="group" aria-label="Delivery target">
+                  <button aria-pressed="false">Broadcast</button>
+                  <button aria-pressed="true">Topic</button>
+                  <button aria-pressed="false">Devices</button>
+                </div>
+              </div>
+              <div class="field">
+                <label for="c-topic">Channel</label>
+                <input id="c-topic" type="text" value="alerts">
+                <div class="hint">Matches every device registered on this channel — currently 2.</div>
+              </div>
+              <div class="row2">
+                <div class="field">
+                  <label for="c-sched">Schedule</label>
+                  <input id="c-sched" type="text" placeholder="now">
+                  <div class="hint">Empty = dispatch immediately.</div>
+                </div>
+                <div class="field">
+                  <label for="c-idem">Idempotency key</label>
+                  <input id="c-idem" type="text" value="alert-node3-1105">
+                  <div class="hint">Retries with the same key won't duplicate.</div>
+                </div>
+              </div>
+              <div class="form-foot">
+                <button class="btn primary">Send notification</button>
+                <button class="btn ghost">Save draft</button>
+                <div class="hint">202 Accepted → job_id returned</div>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <div class="panel">
+              <div class="panel-h"><h2>Device preview</h2><div class="meta">webpush</div></div>
+              <div class="panel-b">
+                <div class="pushcard">
+                  <div class="top">
+                    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M3 6a5 5 0 0 1 10 0v4l1.5 2h-13L3 10z"/><path d="M6.5 13.5a1.6 1.6 0 0 0 3 0"/></svg>
+                    relay · now
+                  </div>
+                  <h3>Disk usage 91% on node-3</h3>
+                  <p>Free space is below the 5 GB threshold. Prune old build artefacts or expand the volume.</p>
+                </div>
+                <div style="margin-top:14px">
+                  <div class="kv"><span>Fan-out</span><b>2 devices</b></div>
+                  <div class="kv"><span>Estimated p50</span><b>38–45 ms</b></div>
+                  <div class="kv"><span>Worker slots</span><b>3 free</b></div>
+                  <div class="kv"><span>Rate limit</span><b>ok · 96 / 100</b></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="panel" style="margin-top:16px">
+              <div class="panel-h"><h2>Request payload</h2><div class="meta">json</div></div>
+              <div class="panel-b">
+<pre class="json"><span class="p">{</span>
+  <span class="k">"title"</span><span class="p">:</span> <span class="s">"Disk usage 91% on node-3"</span><span class="p">,</span>
+  <span class="k">"message"</span><span class="p">:</span> <span class="s">"Free space is below the 5 GB threshold."</span><span class="p">,</span>
+  <span class="k">"topic"</span><span class="p">:</span> <span class="s">"alerts"</span><span class="p">,</span>
+  <span class="k">"idempotency_key"</span><span class="p">:</span> <span class="s">"alert-node3-1105"</span><span class="p">,</span>
+  <span class="k">"scheduled_for"</span><span class="p">:</span> <span class="n">null</span>
+<span class="p">}</span></pre>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══════════ DEVICES ══════════ -->
+    <section class="view" id="view-devices" hidden>
+      <div class="body">
+        <div class="page-head">
+          <div>
+            <h1>Devices</h1>
+            <p>4 registered · 2 web · 1 mobile · 1 pager</p>
+          </div>
+          <div class="right">
+            <button class="btn primary">Register device</button>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="filter-row">
+            <button class="fchip" aria-pressed="true">All<span class="n">4</span></button>
+            <button class="fchip" aria-pressed="false">Web<span class="n">2</span></button>
+            <button class="fchip" aria-pressed="false">Mobile<span class="n">1</span></button>
+            <button class="fchip" aria-pressed="false">Pager<span class="n">1</span></button>
+            <div class="grow" style="flex:1"></div>
+            <div class="search" style="min-width:200px">
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5 14 14"/></svg>
+              <input placeholder="filter by name or channel" aria-label="Filter devices">
+            </div>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>Device</th>
+                <th style="width:90px">Type</th>
+                <th style="width:110px">Channel</th>
+                <th style="width:190px">Endpoint</th>
+                <th style="width:110px">Push</th>
+                <th style="width:130px">Registered</th>
+                <th class="num-r" style="width:150px">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><span class="title">ops-oncall-macbook</span><div class="sub">8f3a4c21</div></td>
+                <td>web</td>
+                <td><span class="topic">#alerts</span></td>
+                <td class="mono">127.0.0.1:5001</td>
+                <td><span class="chip ok"><i></i>active</span></td>
+                <td class="mono">28 Oct 2026</td>
+                <td class="num-r"><button class="btn ghost sm">Ping</button><button class="btn ghost sm" style="color:var(--bad)">Remove</button></td>
+              </tr>
+              <tr>
+                <td><span class="title">prod-web-console</span><div class="sub">c17b09df</div></td>
+                <td>web</td>
+                <td><span class="topic">#general</span></td>
+                <td class="mono">127.0.0.1:5002</td>
+                <td><span class="chip ok"><i></i>active</span></td>
+                <td class="mono">02 Nov 2026</td>
+                <td class="num-r"><button class="btn ghost sm">Ping</button><button class="btn ghost sm" style="color:var(--bad)">Remove</button></td>
+              </tr>
+              <tr>
+                <td><span class="title">billing-service</span><div class="sub">44ae7b10</div></td>
+                <td>mobile</td>
+                <td><span class="topic">#billing</span></td>
+                <td class="mono">fcm:…k92Q</td>
+                <td><span class="chip queued"><i></i>token</span></td>
+                <td class="mono">04 Nov 2026</td>
+                <td class="num-r"><button class="btn ghost sm">Ping</button><button class="btn ghost sm" style="color:var(--bad)">Remove</button></td>
+              </tr>
+              <tr>
+                <td><span class="title">pager-gateway-01</span><div class="sub">02bf5e7a</div></td>
+                <td>pager</td>
+                <td><span class="topic">#alerts</span></td>
+                <td class="mono">sms-gw:…118</td>
+                <td><span class="chip bad"><i></i>none</span></td>
+                <td class="mono">05 Nov 2026</td>
+                <td class="num-r"><button class="btn ghost sm">Ping</button><button class="btn ghost sm" style="color:var(--bad)">Remove</button></td>
+              </tr>
+            </tbody>
+          </table>
+          <div class="foot-note"><span>Ping hits GET /devices/&lt;id&gt;/ping and reports round-trip</span><span>removals need X-API-Key</span></div>
+        </div>
+      </div>
+    </section>
+  </div>
+</div>
+
+<script>
+  const titles = {overview:'overview', compose:'compose', devices:'devices'};
+
+  function show(view){
+    document.querySelectorAll('.view').forEach(v => { v.hidden = v.id !== 'view-' + view; });
+    document.querySelectorAll('.rail .navitem[data-nav]').forEach(n => {
+      n.classList.toggle('active', n.dataset.nav === view);
+    });
+    document.getElementById('crumbNow').textContent = titles[view] || view;
+    window.scrollTo({top:0});
+  }
+
+  document.querySelectorAll('[data-nav]').forEach(el => {
+    el.addEventListener('click', e => {
+      const v = el.dataset.nav;
+      if (!v) return;
+      e.preventDefault();
+      show(v);
+    });
+  });
+
+  // segmented / target / filter groups: purely visual
+  document.querySelectorAll('.seg, .target, .filter-row').forEach(group => {
+    group.querySelectorAll('button').forEach(btn => {
+      btn.addEventListener('click', () => {
+        group.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed','false'));
+        btn.setAttribute('aria-pressed','true');
+      });
+    });
+  });
+
+  document.querySelectorAll('.navitem.off').forEach(el => {
+    el.addEventListener('click', e => e.preventDefault());
+  });
+</script>
+</body>
+</html>

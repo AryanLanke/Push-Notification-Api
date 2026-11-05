@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Relay — Design Board · Direction 01</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#F4F3EE;
+    --surface:#FBFAF6;
+    --surface-2:#F7F6F0;
+    --ink:#15171A;
+    --ink-2:#3D4147;
+    --muted:#767A7B;
+    --faint:#A3A6A3;
+    --line:#E2E0D6;
+    --line-soft:#EDEBE2;
+    --line-strong:#CFCCC1;
+    --rail:#17191B;
+    --accent:#BE4527;
+    --accent-soft:#F0DED6;
+    --ok:#1C6B56;
+    --warn:#9A6812;
+    --bad:#A32E24;
+    --mono:"IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    --sans:"Archivo","Helvetica Neue",Arial,sans-serif;
+    --r:2px;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:var(--sans);background:var(--paper);color:var(--ink);font-size:13px;line-height:1.5;-webkit-font-smoothing:antialiased}
+  a{color:inherit;text-decoration:none}
+  button{font-family:inherit;font-size:inherit;color:inherit;background:none;border:0;cursor:pointer}
+
+  .wrap{max-width:1180px;margin:0 auto;padding:0 28px 70px}
+
+  .masthead{border-bottom:1px solid var(--line);padding:22px 0 20px}
+  .masthead .row{display:flex;align-items:center;gap:10px}
+  .masthead svg.mark{color:var(--accent)}
+  .masthead .name{font-size:15px;font-weight:600}
+  .masthead .slash{color:var(--line-strong)}
+  .masthead .section{font-family:var(--mono);font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:var(--muted)}
+  .masthead .stamp{margin-left:auto;font-family:var(--mono);font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--faint);text-align:right;line-height:1.8}
+
+  .hero{display:grid;grid-template-columns:1.35fr 1fr;gap:48px;padding:44px 0 40px;border-bottom:1px solid var(--line)}
+  .hero h1{font-size:40px;line-height:1.06;letter-spacing:-.035em;font-weight:600}
+  .hero h1 em{font-style:normal;color:var(--accent)}
+  .hero p{font-size:13.5px;color:var(--ink-2);margin-top:16px;max-width:54ch;line-height:1.65}
+  .hero .meta-list{font-family:var(--mono);font-size:9.5px;letter-spacing:.05em;color:var(--muted);line-height:2.1;align-self:end}
+  .hero .meta-list b{font-weight:400;color:var(--ink);float:right;margin-left:20px}
+  .hero .meta-list div{border-bottom:1px solid var(--line-soft);display:block}
+
+  section.block{padding:38px 0;border-bottom:1px solid var(--line)}
+  .block-head{display:flex;align-items:baseline;gap:14px;margin-bottom:22px}
+  .block-head .idx{font-family:var(--mono);font-size:9.5px;letter-spacing:.14em;color:var(--faint)}
+  .block-head h2{font-size:16px;font-weight:600;letter-spacing:-.01em}
+  .block-head .note{margin-left:auto;font-family:var(--mono);font-size:9.5px;color:var(--faint);letter-spacing:.04em}
+
+  /* diagnosis */
+  .diag{display:grid;grid-template-columns:1fr 1fr;gap:0 40px}
+  .diag .row{display:grid;grid-template-columns:1fr auto;gap:16px;padding:11px 0;border-bottom:1px solid var(--line-soft);align-items:baseline}
+  .diag .was{font-size:12.5px;color:var(--muted);text-decoration:line-through;text-decoration-color:#C9B7AF}
+  .diag .why{font-family:var(--mono);font-size:9.5px;color:var(--faint);text-align:right;letter-spacing:.02em}
+
+  /* palette */
+  .swatches{display:grid;grid-template-columns:repeat(6,1fr);gap:1px;background:var(--line);border:1px solid var(--line)}
+  .sw{background:var(--surface);padding:0 0 10px}
+  .sw .chip{height:74px;display:block;border-bottom:1px solid var(--line)}
+  .sw .info{padding:9px 10px 0}
+  .sw .info b{display:block;font-size:11.5px;font-weight:600}
+  .sw .info span{display:block;font-family:var(--mono);font-size:9px;color:var(--muted);letter-spacing:.05em;margin-top:3px}
+  .sw .info em{display:block;font-style:normal;font-family:var(--mono);font-size:8.5px;color:var(--faint);margin-top:5px;letter-spacing:.03em}
+
+  /* type */
+  .typegrid{display:grid;grid-template-columns:1.5fr 1fr;gap:40px}
+  .spec{border-bottom:1px solid var(--line-soft);padding:14px 0;display:grid;grid-template-columns:104px 1fr;gap:18px;align-items:baseline}
+  .spec .tag b{white-space:nowrap}
+  .spec:last-child{border-bottom:0}
+  .spec .tag{font-family:var(--mono);font-size:8.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--faint);line-height:1.9}
+  .spec .tag b{display:block;color:var(--muted);font-weight:400}
+  .d40{font-size:40px;font-weight:600;letter-spacing:-.035em;line-height:1.05}
+  .d27{font-size:27px;font-weight:600;letter-spacing:-.025em;line-height:1.1}
+  .d21{font-size:21px;font-weight:600;letter-spacing:-.02em}
+  .d17{font-size:15px;font-weight:600}
+  .d13{font-size:13px;color:var(--ink-2)}
+  .mono-lab{font-family:var(--mono);font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+  .mono-data{font-family:var(--mono);font-size:28px;font-weight:500;letter-spacing:-.035em;font-variant-numeric:tabular-nums}
+  .mono-small{font-family:var(--mono);font-size:10.5px;color:var(--ink-2)}
+
+  /* rules */
+  .rules{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+  .rule{border:1px solid var(--line);background:var(--surface);padding:15px 16px}
+  .rule h3{font-size:12.5px;font-weight:600;margin-bottom:7px}
+  .rule p{font-size:12px;color:var(--ink-2);line-height:1.6}
+  .rule .demo{margin-top:12px;padding-top:12px;border-top:1px solid var(--line-soft);display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .sq{width:22px;height:22px;border:1px solid #A9ACA7;background:#F1EFE7}
+  .sq.r0{border-radius:0}
+  .sq.r2{border-radius:var(--r)}
+  .sq.r8{border-radius:8px}
+  .sq.r99{border-radius:99px}
+  .rule .demo .cap{font-family:var(--mono);font-size:8.5px;color:var(--faint);letter-spacing:.04em}
+  .bad-mark{color:var(--bad);font-family:var(--mono);font-size:9px;letter-spacing:.06em}
+  .good-mark{color:var(--ok);font-family:var(--mono);font-size:9px;letter-spacing:.06em}
+
+  /* components */
+  .comps{display:grid;grid-template-columns:repeat(2,1fr);gap:16px;align-items:start}
+  .comp{border:1px solid var(--line);background:var(--surface)}
+  .comp .h{font-family:var(--mono);font-size:8.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);padding:9px 14px;border-bottom:1px solid var(--line);background:var(--surface-2)}
+  .comp .b{padding:16px 14px;display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;height:31px;padding:0 13px;border-radius:var(--r);font-size:12px;font-weight:500;border:1px solid var(--line-strong);background:var(--surface);color:var(--ink)}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:#FCF8F5}
+  .btn.ghost{background:transparent;border-color:transparent;color:var(--ink-2);padding:0 8px}
+  .btn.sm{height:26px;padding:0 9px;font-size:11px}
+  .chip{display:inline-flex;align-items:center;gap:6px;font-family:var(--mono);font-size:9px;letter-spacing:.12em;text-transform:uppercase;padding:4px 7px;border:1px solid var(--line);background:var(--surface);border-radius:var(--r);color:var(--ink-2);white-space:nowrap}
+  .chip i{width:5px;height:5px;display:block;background:currentColor}
+  .chip.ok{color:var(--ok);border-color:#CFDDD6}
+  .chip.warn{color:var(--warn);border-color:#E3D7BC}
+  .chip.bad{color:var(--bad);border-color:#E2C8C4}
+  .chip.q{color:#6C7580}
+  input.demo-input{height:33px;border:1px solid var(--line-strong);background:#FFFEFB;border-radius:var(--r);padding:0 10px;font-family:var(--sans);font-size:13px;color:var(--ink);width:100%;outline:none}
+  .kpicell{border:1px solid var(--line);background:var(--surface);padding:13px 15px;flex:1;min-width:150px}
+  .kpicell .lab{font-family:var(--mono);font-size:8.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+  .kpicell .num{font-family:var(--mono);font-size:26px;font-weight:500;letter-spacing:-.035em;margin-top:8px}
+  .kpicell .num small{font-size:12px;color:var(--muted);letter-spacing:0}
+  .kpicell .foot{font-family:var(--mono);font-size:9px;color:var(--faint);margin-top:6px}
+  .empty-demo{text-align:left;padding:0;width:100%}
+  .empty-demo .line{font-family:var(--mono);font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:var(--faint)}
+  .empty-demo h3{font-size:13px;font-weight:600;margin-top:8px}
+  .empty-demo p{font-size:12px;color:var(--muted);margin-top:4px}
+  .empty-demo .act{margin-top:12px}
+
+  .iconrow{display:flex;gap:14px;align-items:center;color:var(--ink-2)}
+  .iconrow svg{display:block}
+
+  /* screens */
+  .screens{display:grid;grid-template-columns:1.35fr 1fr;gap:16px}
+  .screen{border:1px solid var(--line);background:var(--surface);display:flex;flex-direction:column}
+  .screen .h{display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding:12px 14px;border-bottom:1px solid var(--line)}
+  .screen .h h3{font-size:13px;font-weight:600}
+  .screen .h .meta{font-family:var(--mono);font-size:9px;letter-spacing:.06em;color:var(--faint);text-transform:uppercase}
+  .screen .b{padding:14px}
+  .screen .f{padding:11px 14px;border-top:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:12px}
+  .screen .f .open{font-family:var(--mono);font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);border-bottom:1px solid var(--accent-soft);padding-bottom:1px}
+  .screen .f .path{font-family:var(--mono);font-size:9px;color:var(--faint)}
+
+  /* wireframes */
+  .wf{border:1px solid var(--line);background:var(--paper);padding:7px;display:grid;gap:5px;height:196px}
+  .wf-admin{grid-template-columns:44px 1fr}
+  .wf .rail{background:var(--rail);border-radius:1px}
+  .wf .col{display:grid;gap:5px;grid-template-rows:14px 20px 54px 1fr}
+  .wf .bar{background:var(--surface);border:1px solid var(--line)}
+  .wf .kpirow{display:grid;grid-template-columns:repeat(5,1fr);gap:4px}
+  .wf .kpirow div{background:var(--surface);border:1px solid var(--line)}
+  .wf .split{display:grid;grid-template-columns:1.6fr 1fr;gap:4px}
+  .wf .split div{background:var(--surface);border:1px solid var(--line)}
+  .wf .stack{display:grid;grid-template-columns:1fr 54px;gap:4px}
+  .wf .lines{background:var(--surface);border:1px solid var(--line);display:grid;gap:3px;padding:4px;align-content:start}
+  .wf .lines span{display:block;height:5px;background:var(--line-soft)}
+  .wf .aside{background:var(--surface);border:1px solid var(--line)}
+  .wf-note{font-family:var(--mono);font-size:8.5px;letter-spacing:.06em;color:var(--faint);margin-top:9px;line-height:1.7;text-transform:uppercase}
+
+  /* checklist */
+  .checks{display:grid;grid-template-columns:1fr 1fr;gap:0 40px}
+  .checks div{display:flex;gap:9px;padding:9px 0;border-bottom:1px solid var(--line-soft);font-size:12.5px;color:var(--ink-2)}
+  .checks div b{font-family:var(--mono);font-size:9px;letter-spacing:.1em;color:var(--faint);padding-top:3px;min-width:22px}
+  .checks .todo b{color:var(--accent)}
+
+  .foot{padding-top:22px;font-family:var(--mono);font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);display:flex;justify-content:space-between;gap:20px;line-height:1.9}
+
+  @media (max-width:960px){
+    .hero,.diag,.typegrid,.screens{grid-template-columns:1fr;gap:26px}
+    .swatches{grid-template-columns:repeat(3,1fr)}
+    .rules,.comps{grid-template-columns:1fr}
+    .checks{grid-template-columns:1fr}
+  }
+  @media (max-width:600px){
+    .wrap{padding:0 14px 50px}
+    .hero h1{font-size:29px}
+    .swatches{grid-template-columns:repeat(2,1fr)}
+    .spec{grid-template-columns:1fr;gap:6px}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="masthead">
+    <div class="row">
+      <svg class="mark" width="17" height="17" viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path d="M3 6h11M3 11h16M3 16h8"/><circle cx="17.5" cy="6" r="1.6" fill="currentColor" stroke="none"/>
+      </svg>
+      <span class="name">relay</span>
+      <span class="slash">/</span>
+      <span class="section">design board · direction 01</span>
+      <div class="stamp">mockups only — nothing wired<br>05 nov 2026</div>
+    </div>
+  </div>
+
+  <div class="hero">
+    <div>
+      <h1>Stop dressing the console up.<br>Make it <em>read like an instrument</em>.</h1>
+      <p>Both dashboards move to one system: warm paper, a near-black rail, hairline rules instead of floating cards, one burnt accent, and monospace for every number, status and identifier. Dense where the data is dense, quiet where the device is quiet. No gradients, no shadows, no emoji, no italic serif.</p>
+    </div>
+    <div class="meta-list">
+      <div>screens <b>2</b></div>
+      <div>accent colours <b>1</b></div>
+      <div>radii <b>2px</b></div>
+      <div>type families <b>2</b></div>
+      <div>shadows <b>0</b></div>
+    </div>
+  </div>
+
+  <!-- 01 -->
+  <section class="block">
+    <div class="block-head">
+      <span class="idx">01</span>
+      <h2>Why the current UI reads as generated</h2>
+      <span class="note">what direction 01 removes</span>
+    </div>
+    <div class="diag">
+      <div>
+        <div class="row"><span class="was">Cormorant italic in all-caps</span><span class="why">two type voices, no job</span></div>
+        <div class="row"><span class="was">Emoji as section icons</span><span class="why">renders differently per OS</span></div>
+        <div class="row"><span class="was">Gradient stripe on every panel</span><span class="why">decoration without meaning</span></div>
+        <div class="row"><span class="was">Drop shadow on every card</span><span class="why">flattens the hierarchy</span></div>
+      </div>
+      <div>
+        <div class="row"><span class="was">4 identical stat cards</span><span class="why">equal weight for unequal data</span></div>
+        <div class="row"><span class="was">10px radius + hover lift</span><span class="why">toy-like, moves on read</span></div>
+        <div class="row"><span class="was">Blue → teal gradients</span><span class="why">the default palette of nothing</span></div>
+        <div class="row"><span class="was">Emoji in buttons and lists</span><span class="why">competing for the same glance</span></div>
+      </div>
+    </div>
+    <div style="margin-top:20px;padding:13px 15px;border:1px solid var(--line);border-left:2px solid var(--accent);background:var(--surface);font-size:12.5px;color:var(--ink-2);max-width:88ch">
+      The replacement rule: <b style="font-weight:600;color:var(--ink)">every visual choice carries information</b> — a rule separates, a mark signals state, colour is reserved for urgency, and size ranks importance. If it only makes the page “look designed”, it goes.
+    </div>
+  </section>
+
+  <!-- 02 -->
+  <section class="block">
+    <div class="block-head">
+      <span class="idx">02</span>
+      <h2>Palette</h2>
+      <span class="note">warm neutrals · one accent · status only where it matters</span>
+    </div>
+    <div class="swatches">
+      <div class="sw">
+        <span class="chip" style="background:#F4F3EE"></span>
+        <div class="info"><b>Paper</b><span>#F4F3EE</span><em>page base</em></div>
+      </div>
+      <div class="sw">
+        <span class="chip" style="background:#FBFAF6"></span>
+        <div class="info"><b>Surface</b><span>#FBFAF6</span><em>panels, tables</em></div>
+      </div>
+      <div class="sw">
+        <span class="chip" style="background:#E2E0D6"></span>
+        <div class="info"><b>Rule</b><span>#E2E0D6</span><em>1px hairlines</em></div>
+      </div>
+      <div class="sw">
+        <span class="chip" style="background:#15171A"></span>
+        <div class="info"><b>Ink</b><span>#15171A</span><em>text, rail, chart</em></div>
+      </div>
+      <div class="sw">
+        <span class="chip" style="background:#BE4527"></span>
+        <div class="info"><b>Burnt</b><span>#BE4527</span><em>accent, new, CTA</em></div>
+      </div>
+      <div class="sw">
+        <span class="chip" style="background:#1C6B56"></span>
+        <div class="info"><b>Verified</b><span>#1C6B56</span><em>delivered, live</em></div>
+      </div>
+    </div>
+    <div class="wf-note">muted ink #3D4147 · secondary text #767A7B · faint labels #A3A6A3 · warn #9A6812 · failed #A32E24</div>
+  </section>
+
+  <!-- 03 -->
+  <section class="block">
+    <div class="block-head">
+      <span class="idx">03</span>
+      <h2>Type</h2>
+      <span class="note">Archivo for prose · IBM Plex Mono for data</span>
+    </div>
+    <div class="typegrid">
+      <div>
+        <div class="spec"><div class="tag">display<b>40 / 600</b></div><div class="d40">Dispatch console</div></div>
+        <div class="spec"><div class="tag">page title<b>21–27 / 600</b></div><div class="d27">ops-oncall-macbook</div></div>
+        <div class="spec"><div class="tag">panel title<b>12.5 / 600</b></div><div class="d17">Delivery throughput</div></div>
+        <div class="spec"><div class="tag">body<b>13 / 400</b></div><div class="d13">Free space is below the 5 GB threshold. Prune old build artefacts or expand the volume.</div></div>
+        <div class="spec"><div class="tag">label<b>9 / 500 · 0.14em</b></div><div class="mono-lab">Delivered · 24 hours</div></div>
+      </div>
+      <div>
+        <div class="spec"><div class="tag">numeral<b>mono 28</b></div><div class="mono-data">128,430</div></div>
+        <div class="spec"><div class="tag">id / value<b>mono 10.5</b></div><div class="mono-small">f4a1c2d3 · 127.0.0.1:5001 · 41 ms</div></div>
+        <div class="spec"><div class="tag">status<b>mono 9 caps</b></div><div style="display:flex;gap:6px;flex-wrap:wrap"><span class="chip ok"><i></i>delivered</span><span class="chip warn"><i></i>retrying</span><span class="chip q"><i></i>queued</span></div></div>
+        <div class="spec"><div class="tag">rule<b>tracking</b></div><div class="d13" style="color:var(--muted)">Headings tighten (-0.035em). Labels open up (0.14em). Never both at once.</div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 04 -->
+  <section class="block">
+    <div class="block-head">
+      <span class="idx">04</span>
+      <h2>Rules</h2>
+      <span class="note">hard constraints — keep these when it becomes code</span>
+    </div>
+    <div class="rules">
+      <div class="rule">
+        <h3>Radius 2px, nothing round</h3>
+        <p>Inputs, chips, buttons and panels share one radius. No pills, no 8px cards.</p>
+        <div class="demo">
+          <span class="sq r2"></span>
+          <span class="good-mark">2PX — IN SYSTEM</span>
+          <span class="sq r99" style="width:16px;height:16px"></span>
+          <span class="bad-mark">PILL</span>
+        </div>
+      </div>
+      <div class="rule">
+        <h3>Borders, not shadows</h3>
+        <p>Hierarchy comes from hairlines and the paper/surface step. The only shadow allowed is a drawer overlay.</p>
+        <div class="demo">
+          <span class="sq" style="box-shadow:none;border-color:var(--line-strong)"></span>
+          <span class="good-mark">1PX #E2E0D6</span>
+          <span class="sq" style="box-shadow:0 6px 18px rgba(15,23,42,.18)"></span>
+          <span class="bad-mark">ELEVATION</span>
+        </div>
+      </div>
+      <div class="rule">
+        <h3>Colour is a signal</h3>
+        <p>Ink for everything. Burnt only for the primary action and the freshest event. Green/amber/red only for state.</p>
+        <div class="demo">
+          <span class="chip ok"><i></i>ok</span>
+          <span class="chip warn"><i></i>warn</span>
+          <span class="chip bad"><i></i>fail</span>
+          <span class="chip"><i></i>idle</span>
+        </div>
+      </div>
+      <div class="rule">
+        <h3>Icons: 1.3px stroke, 15px</h3>
+        <p>Hand-picked line icons that inherit colour. Never emoji, never filled glyphs.</p>
+        <div class="iconrow">
+          <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="2" y="2" width="5" height="5"/><rect x="9" y="2" width="5" height="5"/><rect x="2" y="9" width="5" height="5"/><rect x="9" y="9" width="5" height="5"/></svg>
+          <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M14 2 2 7l4.5 1.8L8 14z"/></svg>
+          <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="8" cy="8" r="6"/><path d="M8 4.5V8l2.5 1.5"/></svg>
+          <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M3 6a5 5 0 0 1 10 0v4l1.5 2h-13L3 10z"/></svg>
+        </div>
+      </div>
+      <div class="rule">
+        <h3>Motion: 120ms, state only</h3>
+        <p>Hover tints, the live square breathes, a new row settles once. No lifts, no slides on hover.</p>
+        <div class="demo"><span class="chip ok" style="animation:blink 2.4s infinite"><i></i>live</span><span class="cap">opacity 1 → .25 → 1</span></div>
+      </div>
+      <div class="rule">
+        <h3>Spacing: 4 / 8 / 12 / 16 / 22 / 28</h3>
+        <p>Panel padding 16. Page padding 28. Gaps 16. Nothing in between — the rhythm is what makes it feel deliberate.</p>
+        <div class="demo"><span class="cap">28 page · 16 panel · 12 form · 8 inline</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 05 -->
+  <section class="block">
+    <div class="block-head">
+      <span class="idx">05</span>
+      <h2>Components</h2>
+      <span class="note">every element the two screens need</span>
+    </div>
+    <div class="comps">
+      <div class="comp">
+        <div class="h">buttons · one accent per view</div>
+        <div class="b">
+          <button class="btn primary">Send notification</button>
+          <button class="btn">Register device</button>
+          <button class="btn ghost">Refresh</button>
+          <button class="btn sm">Ping</button>
+        </div>
+      </div>
+      <div class="comp">
+        <div class="h">status chips · square mark, mono caps</div>
+        <div class="b">
+          <span class="chip ok"><i></i>delivered</span>
+          <span class="chip warn"><i></i>retrying</span>
+          <span class="chip q"><i></i>queued</span>
+          <span class="chip bad"><i></i>failed</span>
+        </div>
+      </div>
+      <div class="comp">
+        <div class="h">field</div>
+        <div class="b" style="display:block">
+          <div style="font-family:var(--mono);font-size:8.5px;letter-spacing:.13em;text-transform:uppercase;color:var(--muted);margin-bottom:6px">Channel</div>
+          <input class="demo-input" value="alerts">
+          <div style="font-family:var(--mono);font-size:9.5px;color:var(--faint);margin-top:6px">Matches 2 devices on this channel</div>
+        </div>
+      </div>
+      <div class="comp">
+        <div class="h">KPI cell · numbers are the hero</div>
+        <div class="b" style="gap:10px">
+          <div class="kpicell">
+            <div class="lab">Success rate</div>
+            <div class="num">99.2<small>%</small></div>
+            <div class="foot">1,038 retried</div>
+          </div>
+        </div>
+      </div>
+      <div class="comp">
+        <div class="h">empty state · says what to do next</div>
+        <div class="b">
+          <div class="empty-demo">
+            <div class="line">queue · 0 jobs</div>
+            <h3>Nothing is queued.</h3>
+            <p>Jobs appear here the moment a notification is accepted, then leave when every device is attempted.</p>
+            <div class="act"><button class="btn sm">Send a test notification</button></div>
+          </div>
+        </div>
+      </div>
+      <div class="comp">
+        <div class="h">table header · mono, caps, quiet</div>
+        <div class="b" style="display:block;padding:0">
+          <table style="width:100%;border-collapse:collapse">
+            <thead>
+              <tr>
+                <th style="font-family:var(--mono);font-size:8.5px;font-weight:500;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);text-align:left;padding:8px 14px;background:var(--surface-2);border-bottom:1px solid var(--line)">Job</th>
+                <th style="font-family:var(--mono);font-size:8.5px;font-weight:500;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);text-align:left;padding:8px 14px;background:var(--surface-2);border-bottom:1px solid var(--line)">Target</th>
+                <th style="font-family:var(--mono);font-size:8.5px;font-weight:500;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);text-align:right;padding:8px 14px;background:var(--surface-2);border-bottom:1px solid var(--line)">Latency</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td style="font-family:var(--mono);font-size:10.5px;color:var(--muted);padding:0 14px;height:40px;border-bottom:1px solid var(--line-soft)">f4a1c2d3</td>
+                <td style="padding:0 14px;height:40px;border-bottom:1px solid var(--line-soft)"><span style="font-family:var(--mono);font-size:9.5px;border:1px solid var(--line);padding:2px 5px;border-radius:var(--r)">#billing</span></td>
+                <td style="font-family:var(--mono);font-size:10.5px;color:var(--muted);padding:0 14px;height:40px;border-bottom:1px solid var(--line-soft);text-align:right">41 ms</td>
+              </tr>
+              <tr>
+                <td style="font-family:var(--mono);font-size:10.5px;color:var(--muted);padding:0 14px;height:40px">9c07be51</td>
+                <td style="padding:0 14px;height:40px"><span style="font-family:var(--mono);font-size:9.5px;border:1px solid var(--line);padding:2px 5px;border-radius:var(--r)">#orders</span></td>
+                <td style="font-family:var(--mono);font-size:10.5px;color:var(--muted);padding:0 14px;height:40px;text-align:right">38 ms</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 06 -->
+  <section class="block">
+    <div class="block-head">
+      <span class="idx">06</span>
+      <h2>Screens</h2>
+      <span class="note">open both, side by side, in the preview</span>
+    </div>
+    <div class="screens">
+      <div class="screen">
+        <div class="h"><h3>Producer · dispatch console</h3><span class="meta">admin · 3 views</span></div>
+        <div class="b">
+          <div class="wf wf-admin">
+            <div class="rail"></div>
+            <div class="col">
+              <div class="bar"></div>
+              <div class="kpirow"><div></div><div></div><div></div><div></div><div></div></div>
+              <div class="split"><div></div><div></div></div>
+              <div class="split"><div></div><div></div></div>
+            </div>
+          </div>
+          <div class="wf-note">rail 232 · KPIs in one strip, not 5 cards<br>chart + worker pool · live jobs · fleet table</div>
+        </div>
+        <div class="f"><a class="open" href="admin.html">Open console mockup →</a><span class="path">design/admin.html</span></div>
+      </div>
+
+      <div class="screen">
+        <div class="h"><h3>Consumer · device inbox</h3><span class="meta">single device</span></div>
+        <div class="b">
+          <div class="wf" style="grid-template-columns:1fr;grid-template-rows:14px 26px 22px 1fr">
+            <div class="bar"></div>
+            <div class="bar"></div>
+            <div class="kpirow" style="grid-template-columns:repeat(4,1fr)"><div></div><div></div><div></div><div></div></div>
+            <div class="stack">
+              <div class="lines"><span></span><span style="width:82%"></span><span style="width:64%"></span><span></span><span style="width:70%"></span><span></span><span style="width:46%"></span></div>
+              <div class="aside"></div>
+            </div>
+          </div>
+          <div class="wf-note">one column of events · time gutter · state panel<br>the newest row is the only coloured thing on the page</div>
+        </div>
+        <div class="f"><a class="open" href="consumer.html">Open inbox mockup →</a><span class="path">design/consumer.html</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 07 -->
+  <section class="block">
+    <div class="block-head">
+      <span class="idx">07</span>
+      <h2>Before this becomes code</h2>
+      <span class="note">decisions + states to lock</span>
+    </div>
+    <div class="checks">
+      <div><b>01</b><span>Keep the light canvas + dark rail, or invert to a full dark console? Light-on-warm-paper is the recommendation: it survives screenshots, print and projectors.</span></div>
+      <div><b>02</b><span>Product name. The mockups say “relay”; the repo says Producer / Consumer. Pick one and use it in both titles.</span></div>
+      <div><b>03</b><span>Empty, loading and error states for: queue, history, device list, SSE dropped, push denied.</span></div>
+      <div><b>04</b><span>Keyboard: ⌘K search, J/K to move down the live-jobs table, Enter to open a job.</span></div>
+      <div><b>05</b><span>Tables need sorting + a sticky header once history exceeds one screen.</span></div>
+      <div class="todo"><b>06</b><span>Decide whether the consumer gets a channel filter or stays a pure stream. A filter implies devices can subscribe to several topics.</span></div>
+    </div>
+  </section>
+
+  <div class="foot">
+    <span>direction 01 · instrument panel · mockups only</span>
+    <span>flask templates untouched</span>
+  </div>
+</div>
+</body>
+</html>
