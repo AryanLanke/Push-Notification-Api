@@ -555,29 +555,45 @@ def register_device():
     except Exception:
         pass
 
-    # Duplicate device check
-    if ip_address == "127.0.0.1":
-        existing_device = Device.query.filter_by(port=port).first()
-    elif ip_address in local_ips:
-        existing_device = Device.query.filter(
-            Device.port == port,
-            Device.ip_address.in_(local_ips)
-        ).first()
-    else:
-        existing_device = Device.query.filter_by(ip_address=ip_address, port=port).first()
-
     subscription_data = data.get("subscription_data")
     if isinstance(subscription_data, dict):
         subscription_data = json.dumps(subscription_data)
 
+    # Duplicate device check
+    # Check by subscription_data endpoint first (prevents same phone/browser registering twice)
+    existing_device = None
+    if subscription_data:
+        try:
+            sub_json = json.loads(subscription_data) if isinstance(subscription_data, str) else subscription_data
+            endpoint_url = sub_json.get("endpoint")
+            if endpoint_url:
+                existing_device = Device.query.filter(Device.subscription_data.like(f"%{endpoint_url}%")).first()
+        except Exception:
+            pass
+
+    # If not found by subscription, check by network IP + port
+    if not existing_device:
+        if ip_address == "127.0.0.1":
+            existing_device = Device.query.filter_by(port=port).first()
+        elif ip_address in local_ips:
+            existing_device = Device.query.filter(
+                Device.port == port,
+                Device.ip_address.in_(local_ips)
+            ).first()
+        else:
+            existing_device = Device.query.filter_by(ip_address=ip_address, port=port).first()
+
     # If already registered and updating subscription or topic
     if existing_device:
         updated = False
-        if subscription_data and not existing_device.subscription_data:
+        if subscription_data and existing_device.subscription_data != subscription_data:
             existing_device.subscription_data = subscription_data
             updated = True
         if topic and existing_device.topic != topic:
             existing_device.topic = topic
+            updated = True
+        if device_name and existing_device.name != device_name:
+            existing_device.name = device_name
             updated = True
 
         if updated:
@@ -587,7 +603,7 @@ def register_device():
                 return (
                     jsonify({
                         "success": True,
-                        "message": "Device record updated",
+                        "message": "Device record updated (duplicate prevented)",
                         "device": existing_device.to_dict(),
                     }),
                     200,
@@ -598,12 +614,11 @@ def register_device():
 
         return (
             jsonify({
-                "success": False,
-                "error": f"Address already in use — {ip_address}:{port} is already registered as '{existing_device.name}'",
+                "success": True,
+                "message": "Device already registered with active subscription (duplicate prevented)",
                 "device": existing_device.to_dict(),
-                "hint": "Remove the existing device first if you want to re-register this address with a different name.",
             }),
-            409,
+            200,
         )
 
     device = Device(

@@ -141,29 +141,51 @@ def test_send_no_devices(client):
 
 
 def test_duplicate_registration(client):
-    """Test that registering the same IP+Port twice returns 409"""
-    payload = {
-        "name": "Device A",
-        "device_type": "web",
+    """Test that registering the same device updates or safely prevents duplicates instead of creating duplicate records"""
+    sub_data = {
+        "endpoint": "https://fcm.googleapis.com/fcm/send/phone-token-xyz-123",
+        "keys": {"p256dh": "key1", "auth": "key2"}
+    }
+    payload1 = {
+        "name": "Aryan Phone",
+        "device_type": "mobile",
         "ip_address": "127.0.0.1",
         "port": 5002,
+        "subscription_data": sub_data,
+        "topic": "general"
     }
-    response = client.post(
+    response1 = client.post(
         "/devices/register",
-        data=json.dumps(payload),
+        data=json.dumps(payload1),
         content_type="application/json",
     )
-    assert response.status_code == 201
+    assert response1.status_code == 201
 
-    response = client.post(
+    # Second registration from same phone/browser (same subscription endpoint, but different port/IP or topic update)
+    payload2 = {
+        "name": "Aryan Phone",
+        "device_type": "mobile",
+        "ip_address": "192.168.1.50",
+        "port": 5099,
+        "subscription_data": sub_data,
+        "topic": "alerts"
+    }
+    response2 = client.post(
         "/devices/register",
-        data=json.dumps({"name": "Device B", "ip_address": "127.0.0.1", "port": 5002}),
+        data=json.dumps(payload2),
         content_type="application/json",
     )
-    assert response.status_code == 409
-    data = json.loads(response.data)
-    assert data["success"] is False
-    assert "already registered" in data["error"]
+    assert response2.status_code == 200
+    data2 = json.loads(response2.data)
+    assert data2["success"] is True
+    assert "duplicate prevented" in data2["message"]
+    assert data2["device"]["topic"] == "alerts"
+
+    # Verify total devices count in DB is still exactly 1
+    devices_res = client.get("/devices")
+    dev_data = json.loads(devices_res.data)
+    matching_devices = [d for d in dev_data["devices"] if "phone-token-xyz-123" in (d.get("subscription_data") or "")]
+    assert len(matching_devices) == 1
 
 
 def test_send_to_offline_device(client):

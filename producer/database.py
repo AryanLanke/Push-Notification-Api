@@ -59,6 +59,7 @@ class Device(db.Model):
             "email": self.email,
             "topic": self.topic or "general",
             "has_subscription": bool(self.subscription_data),
+            "subscription_data": self.subscription_data,
             "address": f"http://{self.ip_address}:{self.port}",
             "registered_at": self.registered_at.isoformat() if self.registered_at else None,
         }
