@@ -84,6 +84,7 @@ class Notification(db.Model):
     successful = db.Column(db.Integer, default=0)
     failed = db.Column(db.Integer, default=0)
     retry_count = db.Column(db.Integer, default=0)
+    scheduled_for = db.Column(db.DateTime, nullable=True, index=True)
 
     status = db.Column(db.String(20), default="queued", index=True)
     details = db.Column(db.Text, default="[]")
@@ -97,6 +98,7 @@ class Notification(db.Model):
             "status": self.status,
             "enqueued_at": self.enqueued_at.isoformat() if self.enqueued_at else None,
             "processed_at": self.processed_at.isoformat() if self.processed_at else None,
+            "scheduled_for": self.scheduled_for.isoformat() if self.scheduled_for else None,
             "total_devices": self.total_devices,
             "successful": self.successful,
             "failed": self.failed,

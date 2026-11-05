@@ -12,6 +12,7 @@ from logic import (
     get_job_tracker,
     get_active_queued_jobs,
     notification_queue,
+    schedule_notification,
     VALID_DEVICE_TYPES,
     VAPID_PUBLIC_KEY,
     WORKER_POOL_SIZE,
@@ -574,6 +575,7 @@ def send_notification():
     message = data.get("message", "").strip()
     device_ids = data.get("device_ids", [])
     topic = data.get("topic", "").strip().lower()
+    schedule_seconds = data.get("delay_seconds") or data.get("schedule_seconds")
 
     if not device_ids and data.get("device_id"):
         device_ids = [data.get("device_id")]
@@ -634,12 +636,24 @@ def send_notification():
         )
 
     job_id = str(uuid.uuid4())
+    is_scheduled = False
+    scheduled_for = None
+    if schedule_seconds:
+        try:
+            sec = int(schedule_seconds)
+            if sec > 0:
+                is_scheduled = True
+                scheduled_for = datetime.fromtimestamp(time.time() + sec)
+        except (ValueError, TypeError):
+            pass
+
     notif = Notification(
         id=job_id,
         title=title,
         message=message,
         total_devices=len(target_devices),
-        status="queued",
+        status="scheduled" if is_scheduled else "queued",
+        scheduled_for=scheduled_for,
     )
 
     try:
@@ -672,33 +686,38 @@ def send_notification():
     }
 
     # Record in thread-safe fast tracker
+    initial_status = "scheduled" if is_scheduled else "queued"
     update_job_tracker(job_id, {
-        "status": "queued",
+        "status": initial_status,
         "enqueued_at": job["enqueued_at"],
+        "scheduled_for": scheduled_for.isoformat() if scheduled_for else None,
         "total_devices": len(device_dicts),
         "title": title,
     })
 
-    # Push to durable queue
-    notification_queue.put(job)
-
-    # Broadcast to admin dashboard
-    broadcast_sse({
-        "type": "job_queued",
-        "job_id": job_id,
-        "title": title,
-        "total_devices": len(device_dicts)
-    })
+    if is_scheduled:
+        schedule_notification(job, time.time() + int(schedule_seconds), current_app._get_current_object())
+    else:
+        # Push immediately to durable queue
+        notification_queue.put(job)
+        # Broadcast to admin dashboard
+        broadcast_sse({
+            "type": "job_queued",
+            "job_id": job_id,
+            "title": title,
+            "total_devices": len(device_dicts)
+        })
 
     target_addresses = [f"http://{d['ip_address']}:{d['port']}" for d in device_dicts]
-    logger.info("Enqueued job %s: '%s' to %d target(s)", job_id, title, len(device_dicts))
+    logger.info("Enqueued job %s (%s): '%s' to %d target(s)", job_id, initial_status, title, len(device_dicts))
 
     return (
         jsonify({
             "success": True,
-            "message": "Notification job enqueued",
+            "message": f"Notification job {initial_status}",
             "job_id": job_id,
-            "status": "queued",
+            "status": initial_status,
+            "scheduled_for": scheduled_for.isoformat() if scheduled_for else None,
             "total_devices": len(device_dicts),
             "target_addresses": target_addresses,
             "hint": f"Track status at GET /notifications/status/{job_id}",
@@ -791,3 +810,77 @@ def get_notification_history():
         }),
         200,
     )
+
+
+# ============================================================================
+# DEAD-LETTER QUEUE (DLQ) & REPLAY ENDPOINTS
+# ============================================================================
+
+
+@api.route("/notifications/dlq", methods=["GET"])
+@require_api_key
+def get_dead_letter_queue():
+    """List all permanently failed notifications in the Dead-Letter Queue."""
+    dlq_items = (
+        Notification.query.filter_by(status="dlq")
+        .order_by(Notification.processed_at.desc())
+        .limit(100)
+        .all()
+    )
+    return jsonify({
+        "success": True,
+        "count": len(dlq_items),
+        "dead_letter_queue": [item.to_dict() for item in dlq_items],
+    }), 200
+
+
+@api.route("/notifications/dlq/<job_id>/replay", methods=["POST"])
+@require_api_key
+def replay_dead_letter_job(job_id):
+    """Replay a failed job from the Dead-Letter Queue."""
+    notif = db.session.get(Notification, job_id)
+    if not notif:
+        return jsonify({"success": False, "error": "Job not found in DLQ"}), 404
+
+    target_devices = Device.query.all()
+    if not target_devices:
+        return jsonify({"success": False, "error": "No available devices to replay job"}), 400
+
+    device_dicts = [
+        {
+            "id": d.id,
+            "name": d.name,
+            "device_type": d.device_type,
+            "ip_address": d.ip_address,
+            "port": d.port,
+            "subscription_data": d.subscription_data,
+        }
+        for d in target_devices
+    ]
+
+    job = {
+        "job_id": job_id,
+        "title": notif.title,
+        "message": notif.message,
+        "target_devices": device_dicts,
+        "enqueued_at": datetime.now().isoformat(),
+        "retry_count": 0,
+    }
+
+    notif.status = "queued"
+    notif.retry_count = 0
+    try:
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+
+    notification_queue.put(job)
+    update_job_tracker(job_id, {"status": "queued", "retry_count": 0})
+    broadcast_sse({"type": "job_queued", "job_id": job_id, "title": notif.title, "replayed": True})
+
+    return jsonify({
+        "success": True,
+        "message": f"Job {job_id} successfully re-enqueued for delivery from DLQ",
+        "job_id": job_id,
+    }), 200
+

@@ -195,7 +195,7 @@ def test_send_to_offline_device(client):
     response = client.get(f"/notifications/status/{job_id}")
     status_data = json.loads(response.data)
 
-    assert status_data["status"] == "completed"
+    assert status_data["status"] in ["retrying", "completed", "dlq"]
     assert status_data["failed"] >= 1
     assert status_data["successful"] == 0
 
@@ -367,5 +367,69 @@ def test_rate_limiting_exceeded(client):
         client.application.config["ENABLE_RATE_LIMIT_TESTING"] = False
         with _rate_limit_lock:
             _rate_limit_records.clear()
+
+
+def test_scheduled_notification(client):
+    """Test scheduling a notification with delay_seconds"""
+    client.post(
+        "/devices/register",
+        data=json.dumps({"name": "Schedule-Device", "port": 5092}),
+        content_type="application/json",
+    )
+
+    response = client.post(
+        "/notifications/send",
+        data=json.dumps({
+            "title": "Future Alert",
+            "message": "Scheduled in advance",
+            "delay_seconds": 10
+        }),
+        content_type="application/json",
+    )
+    assert response.status_code == 202
+    data = json.loads(response.data)
+    assert data["success"] is True
+    assert data["status"] == "scheduled"
+    assert data["scheduled_for"] is not None
+
+
+def test_dead_letter_queue_and_replay(client):
+    """Test DLQ listing and replaying a failed job"""
+    # Register a device first so replay has a target
+    client.post(
+        "/devices/register",
+        data=json.dumps({"name": "DLQ-Replay-Device", "port": 5095}),
+        content_type="application/json",
+    )
+
+    # Create notification with DLQ status directly
+    job_id = "test-dlq-job-123"
+    with client.application.app_context():
+        notif = Notification(
+            id=job_id,
+            title="Failed Notification",
+            message="DLQ payload",
+            total_devices=1,
+            failed=1,
+            retry_count=3,
+            status="dlq",
+        )
+        db.session.add(notif)
+        db.session.commit()
+
+    # Query DLQ
+    dlq_res = client.get("/notifications/dlq")
+    assert dlq_res.status_code == 200
+    dlq_data = json.loads(dlq_res.data)
+    assert dlq_data["success"] is True
+    assert any(item["id"] == job_id for item in dlq_data["dead_letter_queue"])
+
+    # Replay job from DLQ
+    replay_res = client.post(f"/notifications/dlq/{job_id}/replay")
+    assert replay_res.status_code == 200
+    replay_data = json.loads(replay_res.data)
+    assert replay_data["success"] is True
+    assert replay_data["job_id"] == job_id
+
 
 

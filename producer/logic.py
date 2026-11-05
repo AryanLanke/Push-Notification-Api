@@ -392,6 +392,38 @@ def process_job(job, app):
     successful = len([r for r in results if r["status"] == "success"])
     failed = len([r for r in results if r["status"] == "failed"])
 
+    retry_count = job.get("retry_count", 0)
+    failed_devices = [
+        d for d in target_devices
+        if any(r["device_id"] == d.get("id") and r["status"] == "failed" for r in results)
+    ]
+
+    # Exponential backoff retry or DLQ routing
+    max_retries = 3
+    final_status = "completed"
+    if failed > 0 and len(failed_devices) > 0:
+        if retry_count < max_retries:
+            next_retry = retry_count + 1
+            # Delay in seconds with exponential factor: 2s, 4s, 8s
+            backoff_delay = 2 ** next_retry
+            logger.warning(
+                "Job %s has %d failed targets. Scheduling retry %d in %ds",
+                job_id, len(failed_devices), next_retry, backoff_delay
+            )
+            retry_job = dict(job)
+            retry_job["target_devices"] = failed_devices
+            retry_job["retry_count"] = next_retry
+
+            def _delayed_enqueue():
+                time.sleep(backoff_delay)
+                notification_queue.put(retry_job)
+
+            threading.Thread(target=_delayed_enqueue, daemon=True).start()
+            final_status = "retrying"
+        else:
+            logger.error("Job %s exceeded max retries (%d). Routed to Dead-Letter Queue (DLQ).", job_id, max_retries)
+            final_status = "dlq"
+
     # Update database with rollback protection
     with app.app_context():
         try:
@@ -400,7 +432,8 @@ def process_job(job, app):
                 notif.processed_at = datetime.utcnow()
                 notif.successful = successful
                 notif.failed = failed
-                notif.status = "completed"
+                notif.retry_count = retry_count
+                notif.status = final_status
                 notif.details = json.dumps(results)
                 db.session.commit()
         except Exception as db_err:
@@ -411,23 +444,24 @@ def process_job(job, app):
     update_job_tracker(
         job_id,
         {
-            "status": "completed",
+            "status": final_status,
             "processed_at": datetime.now().isoformat(),
             "successful": successful,
             "failed": failed,
+            "retry_count": retry_count,
             "results": results,
         }
     )
 
     broadcast_sse({
-        "type": "job_complete",
+        "type": "job_complete" if final_status in ["completed", "dlq"] else "job_retrying",
         "job_id": job_id,
-        "status": "completed",
+        "status": final_status,
         "successful": successful,
         "failed": failed,
     })
 
-    logger.info("Job %s completed: %d ok, %d failed", job_id, successful, failed)
+    logger.info("Job %s marked %s: %d ok, %d failed", job_id, final_status, successful, failed)
 
 
 def notification_worker(app):
@@ -447,6 +481,37 @@ def notification_worker(app):
         except Exception as ex:
             logger.error("Worker exception: %s", ex)
             time.sleep(1)
+
+
+def schedule_notification(job, send_at_epoch, app):
+    """
+    Spawns a lightweight daemon timer that releases a delayed notification
+    into the durable worker queue at the specified target time.
+    """
+    delay_seconds = max(0, send_at_epoch - time.time())
+
+    def _wait_and_enqueue():
+        if delay_seconds > 0:
+            time.sleep(delay_seconds)
+        notification_queue.put(job)
+        update_job_tracker(job["job_id"], {"status": "queued"})
+        with app.app_context():
+            try:
+                notif = db.session.get(Notification, job["job_id"])
+                if notif:
+                    notif.status = "queued"
+                    db.session.commit()
+            except Exception as e:
+                db.session.rollback()
+        broadcast_sse({
+            "type": "job_queued",
+            "job_id": job["job_id"],
+            "title": job["title"],
+            "total_devices": len(job.get("target_devices", []))
+        })
+        logger.info("Released scheduled job %s into worker queue", job["job_id"])
+
+    threading.Thread(target=_wait_and_enqueue, daemon=True).start()
 
 
 def start_worker_pool(app):
