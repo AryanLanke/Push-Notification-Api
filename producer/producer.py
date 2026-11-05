@@ -35,6 +35,9 @@ def create_app(testing=False):
 
     # Database configuration
     database_uri = os.getenv("DATABASE_URI", "sqlite:///notifications.db")
+    # Fix Render / Heroku legacy postgres:// schema prefix for modern SQLAlchemy
+    if database_uri.startswith("postgres://"):
+        database_uri = database_uri.replace("postgres://", "postgresql://", 1)
     app.config["SQLALCHEMY_DATABASE_URI"] = database_uri
     app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
