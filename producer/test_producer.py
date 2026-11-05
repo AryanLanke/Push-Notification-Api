@@ -1,6 +1,7 @@
 import pytest
 import json
 import os
+import time
 from producer import create_app
 from database import db, Device, Notification
 from logic import notification_queue, process_job
@@ -333,4 +334,38 @@ def test_delivery_receipt_ack(client):
     assert ack_res.status_code == 200
     ack_data = json.loads(ack_res.data)
     assert ack_data["success"] is True
+
+
+def test_rate_limiting_exceeded(client):
+    """Test that requests exceeding the configured rate limit return 429 Too Many Requests"""
+    # Enable rate limiting testing flag for this app context
+    client.application.config["ENABLE_RATE_LIMIT_TESTING"] = True
+    try:
+        # Register test device first
+        client.post(
+            "/devices/register",
+            data=json.dumps({"name": "Rate-Device", "port": 5090}),
+            content_type="application/json",
+        )
+
+        from endpoints import _rate_limit_records, _rate_limit_lock
+        with _rate_limit_lock:
+            # Simulate 60 recent requests from the test client IP
+            _rate_limit_records["127.0.0.1"] = [time.time()] * 60
+
+        response = client.post(
+            "/notifications/send",
+            data=json.dumps({"title": "Spam", "message": "Flood"}),
+            content_type="application/json",
+        )
+        assert response.status_code == 429
+        data = json.loads(response.data)
+        assert data["success"] is False
+        assert "Too Many Requests" in data["error"]
+        assert "Retry-After" in response.headers
+    finally:
+        client.application.config["ENABLE_RATE_LIMIT_TESTING"] = False
+        with _rate_limit_lock:
+            _rate_limit_records.clear()
+
 

@@ -26,7 +26,10 @@ import uuid
 import socket
 import queue
 import os
+import time
+import threading
 import logging
+from collections import defaultdict
 
 logger = logging.getLogger("ProducerEndpoints")
 
@@ -74,6 +77,56 @@ def require_api_key(f):
             )
         return f(*args, **kwargs)
     return decorated
+
+
+# ============================================================================
+# RATE LIMITING & THROTTLING (Sliding Window Token Bucket)
+# ============================================================================
+_rate_limit_lock = threading.Lock()
+_rate_limit_records = defaultdict(list)
+
+
+def rate_limit(max_requests=60, window_seconds=60):
+    """
+    Thread-safe sliding-window rate limiter per client IP or API Key.
+    Returns HTTP 429 Too Many Requests if rate exceeded.
+    """
+    def decorator(f):
+        @functools.wraps(f)
+        def wrapper(*args, **kwargs):
+            if current_app.config.get("TESTING") and not current_app.config.get("ENABLE_RATE_LIMIT_TESTING"):
+                return f(*args, **kwargs)
+
+            client_id = (
+                request.headers.get("X-API-Key")
+                or request.headers.get("X-Forwarded-For", "").split(",")[0].strip()
+                or request.remote_addr
+                or "unknown"
+            )
+
+            now = time.time()
+            with _rate_limit_lock:
+                timestamps = _rate_limit_records[client_id]
+                # Filter out timestamps outside window
+                valid_timestamps = [t for t in timestamps if now - t < window_seconds]
+                if len(valid_timestamps) >= max_requests:
+                    retry_after = int(window_seconds - (now - valid_timestamps[0])) + 1
+                    response = jsonify({
+                        "success": False,
+                        "error": "Too Many Requests",
+                        "message": f"Rate limit of {max_requests} requests per {window_seconds}s exceeded.",
+                        "retry_after_seconds": max(1, retry_after),
+                    })
+                    response.status_code = 429
+                    response.headers["Retry-After"] = str(max(1, retry_after))
+                    return response
+
+                valid_timestamps.append(now)
+                _rate_limit_records[client_id] = valid_timestamps
+
+            return f(*args, **kwargs)
+        return wrapper
+    return decorator
 
 
 def is_ssrf_target(host):
@@ -498,6 +551,7 @@ def acknowledge_notification():
 
 @api.route("/notifications/send", methods=["POST"])
 @require_api_key
+@rate_limit(max_requests=60, window_seconds=60)
 def send_notification():
     """
     Accept notification payload and enqueue for background worker pool delivery.
