@@ -256,6 +256,7 @@ def register_device():
         return jsonify({"success": False, "error": "Invalid port number"}), 400
 
     email = data.get("email", "").strip()
+    topic = data.get("topic", "general").strip().lower() or "general"
 
     # SSRF Protection
     if is_ssrf_target(ip_address):
@@ -297,17 +298,24 @@ def register_device():
     if isinstance(subscription_data, dict):
         subscription_data = json.dumps(subscription_data)
 
-    # If already registered and updating subscription
+    # If already registered and updating subscription or topic
     if existing_device:
+        updated = False
         if subscription_data and not existing_device.subscription_data:
             existing_device.subscription_data = subscription_data
+            updated = True
+        if topic and existing_device.topic != topic:
+            existing_device.topic = topic
+            updated = True
+
+        if updated:
             try:
                 db.session.commit()
                 broadcast_sse({"type": "device_change"})
                 return (
                     jsonify({
                         "success": True,
-                        "message": "Device subscription updated",
+                        "message": "Device record updated",
                         "device": existing_device.to_dict(),
                     }),
                     200,
@@ -332,6 +340,7 @@ def register_device():
         ip_address=ip_address,
         port=port,
         email=email,
+        topic=topic,
         subscription_data=subscription_data,
     )
 
@@ -395,6 +404,93 @@ def unregister_device(device_id):
     )
 
 
+@api.route("/devices/<device_id>/ping", methods=["GET"])
+def ping_device(device_id):
+    """
+    On-demand connectivity and latency measurement for a device.
+    Pings the device's /status endpoint and returns response time in milliseconds.
+    """
+    import time
+    import requests
+
+    device = db.session.get(Device, device_id)
+    if not device:
+        return jsonify({"success": False, "error": "Device not found"}), 404
+
+    start_time = time.time()
+    try:
+        url = f"http://{device.ip_address}:{device.port}/status"
+        res = requests.get(url, timeout=3)
+        latency_ms = max(1, int((time.time() - start_time) * 1000))
+        is_online = res.status_code == 200
+
+        return jsonify({
+            "success": True,
+            "device_id": device_id,
+            "device_name": device.name,
+            "status": "online" if is_online else "unresponsive",
+            "latency_ms": latency_ms,
+            "http_status": res.status_code,
+        }), 200
+    except Exception as e:
+        latency_ms = int((time.time() - start_time) * 1000)
+        return jsonify({
+            "success": False,
+            "device_id": device_id,
+            "device_name": device.name,
+            "status": "offline",
+            "latency_ms": latency_ms,
+            "error": "Connection timed out or device unreachable",
+        }), 200
+
+
+@api.route("/topics", methods=["GET"])
+def list_topics():
+    """List all distinct topics subscribed across devices."""
+    devices = Device.query.all()
+    topics = sorted(list({d.topic or "general" for d in devices}))
+    return jsonify({
+        "success": True,
+        "count": len(topics),
+        "topics": topics,
+    }), 200
+
+
+@api.route("/notifications/ack", methods=["POST"])
+def acknowledge_notification():
+    """
+    Delivery receipt webhook: called by Consumer when a notification is rendered.
+    Updates the audit record and notifies dashboards in real time.
+    """
+    data = request.get_json() or {}
+    job_id = data.get("job_id")
+    device_id = data.get("device_id")
+
+    if not job_id or not device_id:
+        return jsonify({"success": False, "error": "Missing job_id or device_id"}), 400
+
+    notif = db.session.get(Notification, job_id)
+    if notif and notif.details:
+        try:
+            details = json.loads(notif.details)
+            updated = False
+            for d in details:
+                if d.get("device_id") == device_id:
+                    d["acknowledged"] = True
+                    d["acked_at"] = datetime.utcnow().isoformat()
+                    updated = True
+            if updated:
+                notif.details = json.dumps(details)
+                db.session.commit()
+                broadcast_sse({"type": "job_ack", "job_id": job_id, "device_id": device_id})
+                logger.info("Recorded delivery ACK for job %s from device %s", job_id, device_id)
+        except Exception as e:
+            db.session.rollback()
+            logger.error("Error processing delivery ACK: %s", e)
+
+    return jsonify({"success": True, "message": "Delivery acknowledged"}), 200
+
+
 # ============================================================================
 # NOTIFICATION DISPATCH & QUERY CONTROLLERS
 # ============================================================================
@@ -406,6 +502,7 @@ def send_notification():
     """
     Accept notification payload and enqueue for background worker pool delivery.
     Responds immediately with 202 Accepted.
+    Supports targeting by device_ids, topic (channel), or full broadcast.
     """
     data = request.get_json()
 
@@ -422,6 +519,8 @@ def send_notification():
     title = data.get("title", "").strip()
     message = data.get("message", "").strip()
     device_ids = data.get("device_ids", [])
+    topic = data.get("topic", "").strip().lower()
+
     if not device_ids and data.get("device_id"):
         device_ids = [data.get("device_id")]
 
@@ -454,6 +553,16 @@ def send_notification():
                     "success": False,
                     "error": "None of the specified devices were found",
                     "not_found": not_found,
+                }),
+                404,
+            )
+    elif topic and topic != "all":
+        target_devices = Device.query.filter_by(topic=topic).all()
+        if not target_devices:
+            return (
+                jsonify({
+                    "success": False,
+                    "error": f"No devices found for topic '#{topic}'",
                 }),
                 404,
             )

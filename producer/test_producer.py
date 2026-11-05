@@ -257,3 +257,80 @@ def test_send_missing_fields(client):
         content_type="application/json",
     )
     assert response.status_code == 400
+
+
+def test_topics_endpoint(client):
+    """Test registering devices with topics and listing distinct topics"""
+    client.post(
+        "/devices/register",
+        data=json.dumps({"name": "Ops-Device", "port": 5081, "topic": "devops"}),
+        content_type="application/json",
+    )
+    client.post(
+        "/devices/register",
+        data=json.dumps({"name": "Alerts-Device", "port": 5082, "topic": "alerts"}),
+        content_type="application/json",
+    )
+
+    response = client.get("/topics")
+    assert response.status_code == 200
+    data = json.loads(response.data)
+    assert data["success"] is True
+    assert "devops" in data["topics"]
+    assert "alerts" in data["topics"]
+
+
+def test_send_by_topic(client):
+    """Test targeting notification dispatch by topic channel"""
+    client.post(
+        "/devices/register",
+        data=json.dumps({"name": "Billing-Server", "port": 5083, "topic": "billing"}),
+        content_type="application/json",
+    )
+
+    response = client.post(
+        "/notifications/send",
+        data=json.dumps({
+            "title": "Invoice Generated",
+            "message": "Monthly invoice #402 ready",
+            "topic": "billing"
+        }),
+        content_type="application/json",
+    )
+    assert response.status_code == 202
+    data = json.loads(response.data)
+    assert data["success"] is True
+    assert data["total_devices"] == 1
+
+
+def test_delivery_receipt_ack(client):
+    """Test webhook delivery receipt ACK endpoint"""
+    reg = client.post(
+        "/devices/register",
+        data=json.dumps({"name": "Ack-Device", "port": 5084, "topic": "general"}),
+        content_type="application/json",
+    )
+    dev_id = json.loads(reg.data)["device"]["device_id"]
+
+    # Send notification to generate job
+    send_res = client.post(
+        "/notifications/send",
+        data=json.dumps({"title": "Receipt Test", "message": "Verify ACK"}),
+        content_type="application/json",
+    )
+    job_id = json.loads(send_res.data)["job_id"]
+
+    # Send delivery receipt ACK
+    ack_res = client.post(
+        "/notifications/ack",
+        data=json.dumps({
+            "job_id": job_id,
+            "device_id": dev_id,
+            "device_name": "Ack-Device"
+        }),
+        content_type="application/json",
+    )
+    assert ack_res.status_code == 200
+    ack_data = json.loads(ack_res.data)
+    assert ack_data["success"] is True
+

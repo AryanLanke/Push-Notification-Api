@@ -50,6 +50,21 @@ sse_clients = []
 sse_clients_lock = threading.Lock()
 
 
+def _send_ack_async(job_id, device_id, producer_host, producer_port, api_key):
+    """Deliver asynchronous delivery acknowledgement back to Producer."""
+    if not job_id or not device_id or device_id == "not-registered":
+        return
+    try:
+        url = f"http://{producer_host}:{producer_port}/notifications/ack"
+        headers = {"Content-Type": "application/json"}
+        if api_key:
+            headers["X-API-Key"] = api_key
+        requests.post(url, json={"job_id": job_id, "device_id": device_id}, headers=headers, timeout=3)
+        logger.debug(f"Dispatched ACK for job {job_id}")
+    except Exception as e:
+        logger.debug(f"ACK delivery error: {e}")
+
+
 # ============================================================================
 # CONSUMER ENDPOINTS
 # ============================================================================
@@ -105,6 +120,7 @@ def receive_notification():
         }), 400
 
     notification = {
+        "job_id": data.get("job_id"),
         "title": data.get("title", "No Title"),
         "message": data.get("message", "No Message"),
         "from": data.get("from", "Producer API"),
@@ -124,6 +140,22 @@ def receive_notification():
                 pass
 
     logger.info(f"Notification received: '{notification['title']}' from {notification['from']}")
+
+    # Asynchronously dispatch delivery acknowledgement (ACK) back to Producer
+    job_id = data.get("job_id")
+    device_id = app.config.get("DEVICE_ID")
+    if job_id and device_id and device_id != "not-registered":
+        threading.Thread(
+            target=_send_ack_async,
+            args=(
+                job_id,
+                device_id,
+                app.config.get("PRODUCER_HOST", "127.0.0.1"),
+                app.config.get("PRODUCER_PORT", 5000),
+                app.config.get("API_KEY", "")
+            ),
+            daemon=True
+        ).start()
 
     return (
         jsonify({
@@ -239,7 +271,7 @@ def update_subscription():
 # ============================================================================
 
 
-def register_with_producer(name, port, producer_host, producer_port, host="127.0.0.1", api_key=""):
+def register_with_producer(name, port, producer_host, producer_port, host="127.0.0.1", api_key="", topic="general"):
     """
     Auto-register this consumer device with the Producer API.
     Retries up to 5 times in case Producer container is initializing.
@@ -253,6 +285,7 @@ def register_with_producer(name, port, producer_host, producer_port, host="127.0
         "ip_address": host,
         "port": port,
         "email": "",
+        "topic": topic,
     }
     headers = {"Content-Type": "application/json"}
     if api_key:
@@ -339,6 +372,12 @@ if __name__ == "__main__":
         help="API Key for Producer authentication",
     )
     parser.add_argument(
+        "--topic",
+        type=str,
+        default=os.getenv("TOPIC", "general"),
+        help="Topic/channel for subscription (default: general)",
+    )
+    parser.add_argument(
         "--no-register",
         action="store_true",
         default=False,
@@ -351,6 +390,7 @@ if __name__ == "__main__":
     app.config["PRODUCER_HOST"] = args.producer_host
     app.config["PRODUCER_PORT"] = args.producer_port
     app.config["API_KEY"] = args.api_key
+    app.config["TOPIC"] = args.topic
 
     if args.host == "auto":
         register_host = get_network_ip()
@@ -359,7 +399,7 @@ if __name__ == "__main__":
     app.config["REGISTER_HOST"] = register_host
 
     logger.info("=" * 60)
-    logger.info(f"CONSUMER DEVICE — {args.name}")
+    logger.info(f"CONSUMER DEVICE — {args.name} [Topic: #{args.topic}]")
     logger.info(f"  This device:  http://{register_host}:{args.port}")
     logger.info(f"  Producer at:  http://{args.producer_host}:{args.producer_port}")
     logger.info("=" * 60)
@@ -371,7 +411,8 @@ if __name__ == "__main__":
             args.producer_host,
             args.producer_port,
             register_host,
-            args.api_key
+            args.api_key,
+            args.topic
         )
 
     app.run(host="0.0.0.0", port=args.port, debug=False)

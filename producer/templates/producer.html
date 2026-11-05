@@ -479,6 +479,39 @@
             color: var(--danger);
         }
 
+        .ping-btn {
+            background: transparent;
+            border: 1px solid var(--border-strong);
+            color: var(--blue);
+            padding: 5px 9px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 0.72rem;
+            font-family: inherit;
+            font-weight: 600;
+            transition: all 0.15s;
+            flex-shrink: 0;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .ping-btn:hover {
+            background: var(--blue-dim);
+            border-color: var(--blue);
+        }
+
+        .latency-badge {
+            font-size: 0.65rem;
+            font-family: 'DM Mono', monospace;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-weight: 600;
+            letter-spacing: 0.02em;
+        }
+        .latency-online { background: rgba(5,150,105,0.09); color: var(--success); border: 1px solid rgba(5,150,105,0.2); }
+        .latency-offline { background: rgba(220,38,38,0.08); color: var(--danger); border: 1px solid rgba(220,38,38,0.2); }
+
         /* ── DEVICE CHECK LIST ── */
         .device-check-list {
             background: var(--surface);
@@ -771,8 +804,16 @@
                         <input id="regPort" type="number" value="5001" />
                     </div>
                 </div>
-                <label class="form-label">IP Address</label>
-                <input id="regIp" type="text" value="127.0.0.1" />
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                    <div>
+                        <label class="form-label">IP Address</label>
+                        <input id="regIp" type="text" value="127.0.0.1" />
+                    </div>
+                    <div>
+                        <label class="form-label">Topic / Channel</label>
+                        <input id="regTopic" type="text" value="general" placeholder="e.g. general, alerts" />
+                    </div>
+                </div>
                 <button class="btn btn-register" id="regBtn" onclick="registerDevice()">
                     <span>📲</span> Register Device
                 </button>
@@ -786,13 +827,35 @@
                 <input id="notifTitle" type="text" placeholder="Enter notification title" />
                 <label class="form-label">Message</label>
                 <textarea id="notifMessage" placeholder="Your notification message here..."></textarea>
-                <label class="form-label">Target Devices</label>
-                <div class="device-check-list" id="deviceCheckList">
-                    <div class="device-check-item all-item">
-                        <input type="checkbox" id="chk-all" checked onchange="toggleAll(this)" />
-                        <label for="chk-all">📢 All Devices (Broadcast)</label>
+                
+                <label class="form-label">Delivery Target</label>
+                <div style="display:flex;gap:16px;margin-bottom:12px;flex-wrap:wrap;">
+                    <label style="display:flex;align-items:center;gap:6px;font-size:0.78rem;cursor:pointer;">
+                        <input type="radio" name="sendMode" value="all" checked onchange="onSendModeChange(this.value)" style="width:auto;margin:0;" /> 📢 All Broadcast
+                    </label>
+                    <label style="display:flex;align-items:center;gap:6px;font-size:0.78rem;cursor:pointer;">
+                        <input type="radio" name="sendMode" value="topic" onchange="onSendModeChange(this.value)" style="width:auto;margin:0;" /> 🏷️ By Topic
+                    </label>
+                    <label style="display:flex;align-items:center;gap:6px;font-size:0.78rem;cursor:pointer;">
+                        <input type="radio" name="sendMode" value="custom" onchange="onSendModeChange(this.value)" style="width:auto;margin:0;" /> 🔘 Custom Devices
+                    </label>
+                </div>
+
+                <div id="topicInputWrapper" style="display:none;margin-bottom:14px;">
+                    <label class="form-label">Channel Topic</label>
+                    <input id="notifTopic" type="text" placeholder="e.g. general, alerts, ops" value="general" style="margin-bottom:0;" />
+                </div>
+
+                <div id="deviceCheckListWrapper" style="display:none;">
+                    <label class="form-label">Target Devices</label>
+                    <div class="device-check-list" id="deviceCheckList">
+                        <div class="device-check-item all-item">
+                            <input type="checkbox" id="chk-all" checked onchange="toggleAll(this)" />
+                            <label for="chk-all">📢 Select All</label>
+                        </div>
                     </div>
                 </div>
+
                 <button class="btn btn-send" id="sendBtn" onclick="sendNotification()">
                     <span>🚀</span> Send Notification
                 </button>
@@ -837,6 +900,14 @@
                 <div class="section-title">
                     <span>📜</span> Notification History
                     <button onclick="loadHistory()">↻ Refresh</button>
+                </div>
+                <div style="display:flex;gap:8px;margin-bottom:14px;align-items:center;">
+                    <input type="text" id="histSearch" placeholder="🔍 Search history..." oninput="filterHistory()" style="margin-bottom:0;padding:7px 11px;font-size:0.79rem;border-radius:5px;" />
+                    <select id="histFilter" onchange="filterHistory()" style="margin-bottom:0;width:auto;min-width:115px;padding:7px 26px 7px 10px;font-size:0.78rem;border-radius:5px;">
+                        <option value="all">All Status</option>
+                        <option value="success">✅ Delivered</option>
+                        <option value="failed">❌ Partial/Failed</option>
+                    </select>
                 </div>
                 <div class="history-list" id="historyList">
                     <div class="empty">
@@ -917,6 +988,53 @@
         } catch (e) { document.getElementById('netIp').textContent = "Offline"; }
     }
 
+    // ── SEND MODE SWITCH ──
+    function onSendModeChange(mode) {
+        const topicWrapper = document.getElementById('topicInputWrapper');
+        const deviceWrapper = document.getElementById('deviceCheckListWrapper');
+        if (mode === 'topic') {
+            topicWrapper.style.display = 'block';
+            deviceWrapper.style.display = 'none';
+        } else if (mode === 'custom') {
+            topicWrapper.style.display = 'none';
+            deviceWrapper.style.display = 'block';
+        } else {
+            topicWrapper.style.display = 'none';
+            deviceWrapper.style.display = 'none';
+        }
+    }
+
+    // ── PING DEVICE ──
+    async function pingDevice(deviceId) {
+        const badge = document.getElementById(`ping-res-${deviceId}`);
+        const btn = document.getElementById(`btn-ping-${deviceId}`);
+        if (badge) {
+            badge.style.display = 'inline-block';
+            badge.className = 'latency-badge';
+            badge.textContent = '⏳ ...';
+        }
+        if (btn) btn.disabled = true;
+
+        try {
+            const res = await fetch(`${API}/devices/${deviceId}/ping`);
+            const data = await res.json();
+            if (data.status === 'online') {
+                badge.className = 'latency-badge latency-online';
+                badge.textContent = `🟢 ${data.latency_ms}ms`;
+            } else {
+                badge.className = 'latency-badge latency-offline';
+                badge.textContent = `🔴 Offline`;
+            }
+        } catch (e) {
+            if (badge) {
+                badge.className = 'latency-badge latency-offline';
+                badge.textContent = `🔴 Error`;
+            }
+        } finally {
+            if (btn) btn.disabled = false;
+        }
+    }
+
     // ── LOAD DEVICES ──
     async function loadDevices(isSilent = false) {
         try {
@@ -950,7 +1068,7 @@
       <label for="chk-${d.device_id}">
         ${typeIcon[d.device_type] || '💻'}
         <span>${d.name}</span>
-        <span style="color:var(--muted);font-size:0.75rem;">(${d.address})</span>
+        <span style="color:var(--muted);font-size:0.75rem;">(#${d.topic || 'general'})</span>
       </label>`;
                 checkList.appendChild(div);
             });
@@ -964,10 +1082,15 @@
           <div class="device-addr">
             ${d.address} &nbsp;|&nbsp;
             <span class="type-badge type-${d.device_type}">${d.device_type.toUpperCase()}</span>
+            <span class="type-badge" style="background:rgba(13,148,136,0.08);color:var(--teal);">#${d.topic || 'general'}</span>
           </div>
         </div>
       </div>
-      <button class="del-btn" onclick="deleteDevice('${d.device_id}','${d.name}')">✕ Remove</button>
+      <div style="display:flex;align-items:center;gap:6px;">
+        <span class="latency-badge" id="ping-res-${d.device_id}" style="display:none;"></span>
+        <button class="ping-btn" id="btn-ping-${d.device_id}" onclick="pingDevice('${d.device_id}')">⚡ Ping</button>
+        <button class="del-btn" onclick="deleteDevice('${d.device_id}','${d.name}')">✕</button>
+      </div>
     </div>`).join('');
         } catch (e) {
             if (!isSilent) {
@@ -990,7 +1113,7 @@
     async function sendNotification() {
         const title = document.getElementById('notifTitle').value.trim();
         const message = document.getElementById('notifMessage').value.trim();
-        const selected = getSelectedDeviceIds();
+        const sendMode = document.querySelector('input[name="sendMode"]:checked')?.value || 'all';
         const statusEl = document.getElementById('sendStatus');
 
         if (!title) { statusEl.innerHTML = '<span style="color:var(--danger)">⚠ Title is required.</span>'; return; }
@@ -1000,7 +1123,12 @@
         btn.disabled = true; btn.innerHTML = '<span>⏳</span> Sending...';
 
         const body = { title, message };
-        if (selected.length > 0) body.device_ids = selected;
+        if (sendMode === 'topic') {
+            body.topic = document.getElementById('notifTopic').value.trim() || 'general';
+        } else if (sendMode === 'custom') {
+            const selected = getSelectedDeviceIds();
+            if (selected.length > 0) body.device_ids = selected;
+        }
 
         try {
             const r = await fetch(`${API}/notifications/send`, {
@@ -1097,49 +1225,46 @@
     }
 
     // ── LOAD HISTORY ──
-    async function loadHistory(isSilent = false) {
-        try {
-            const r = await fetch(`${API}/notifications/history`);
-            const data = await r.json();
+    let allHistory = [];
 
-            const currentJson = JSON.stringify(data.notifications);
-            if (currentJson === lastHistoryJson && isSilent) return;
-            lastHistoryJson = currentJson;
+    function renderHistoryList(items) {
+        const list = document.getElementById('historyList');
+        if (!items || items.length === 0) {
+            list.innerHTML = '<div class="empty"><div class="empty-icon">📭</div><p>No matching notifications.</p></div>';
+            return;
+        }
 
-            document.getElementById('statJobs').textContent = data.count || 0;
-            const list = document.getElementById('historyList');
+        const dateOptions = { weekday: 'short', hour: 'numeric', minute: 'numeric', hour12: true };
 
-            if (!data.notifications || data.notifications.length === 0) {
-                list.innerHTML = '<div class="empty"><div class="empty-icon">📭</div><p>No notifications sent yet.</p></div>';
-                return;
+        list.innerHTML = items.map(n => {
+            const cls = n.failed === 0 ? 'success' : n.successful > 0 ? 'partial' : '';
+            const timeStr = n.enqueued_at ? new Intl.DateTimeFormat('en-US', dateOptions).format(new Date(n.enqueued_at + 'Z')) : '—';
+
+            let detailsHtml = '';
+            if (n.details && n.details.length > 0) {
+                const rows = n.details.map(d => {
+                    const icon = d.status === 'success' ? '✅' : '❌';
+                    const color = d.status === 'success' ? 'var(--success)' : 'var(--danger)';
+                    const reason = d.message || 'Unknown';
+                    const ackBadge = d.acknowledged
+                        ? `<span style="background:rgba(5,150,105,0.09);color:var(--success);border:1px solid rgba(5,150,105,0.22);padding:2px 6px;border-radius:4px;font-size:0.62rem;font-weight:700;margin-left:6px;">✓ ACKNOWLEDGED</span>`
+                        : '';
+
+                    return `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);font-size:0.74rem;">
+                        <span>${icon}</span>
+                        <span style="font-weight:600;min-width:120px;">${esc(d.device_name || 'Unknown')}</span>
+                        <span class="type-badge type-${d.device_type || 'web'}" style="font-size:0.58rem;">${(d.device_type || 'web').toUpperCase()}</span>
+                        ${ackBadge}
+                        <span style="color:${color};margin-left:auto;text-align:right;max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${esc(reason)}">${esc(reason)}</span>
+                    </div>`;
+                }).join('');
+                detailsHtml = `<div class="detail-panel" style="display:none;margin-top:10px;padding:8px 10px;background:var(--surface);border:1px solid var(--border);border-radius:6px;">
+                    <div style="font-size:0.66rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px;">Delivery Details & Acknowledgements</div>
+                    ${rows}
+                </div>`;
             }
 
-            const dateOptions = { weekday: 'short', hour: 'numeric', minute: 'numeric', hour12: true };
-
-            list.innerHTML = data.notifications.map(n => {
-                const cls = n.failed === 0 ? 'success' : n.successful > 0 ? 'partial' : '';
-                const timeStr = n.enqueued_at ? new Intl.DateTimeFormat('en-US', dateOptions).format(new Date(n.enqueued_at + 'Z')) : '—';
-
-                let detailsHtml = '';
-                if (n.details && n.details.length > 0) {
-                    const rows = n.details.map(d => {
-                        const icon = d.status === 'success' ? '✅' : '❌';
-                        const color = d.status === 'success' ? 'var(--success)' : 'var(--danger)';
-                        const reason = d.message || 'Unknown';
-                        return `<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--border);font-size:0.74rem;">
-                            <span>${icon}</span>
-                            <span style="font-weight:600;min-width:120px;">${esc(d.device_name || 'Unknown')}</span>
-                            <span class="type-badge type-${d.device_type || 'web'}" style="font-size:0.58rem;">${(d.device_type || 'web').toUpperCase()}</span>
-                            <span style="color:${color};margin-left:auto;text-align:right;max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${esc(reason)}">${esc(reason)}</span>
-                        </div>`;
-                    }).join('');
-                    detailsHtml = `<div class="detail-panel" style="display:none;margin-top:10px;padding:8px 10px;background:var(--surface);border:1px solid var(--border);border-radius:6px;">
-                        <div style="font-size:0.66rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px;">Per-Device Results</div>
-                        ${rows}
-                    </div>`;
-                }
-
-                return `
+            return `
     <div class="history-item ${cls}" style="cursor:pointer;" onclick="toggleDetails(this)">
       <div style="display:flex;align-items:center;justify-content:space-between;">
         <div class="history-title">${esc(n.title)}</div>
@@ -1154,7 +1279,37 @@
       </div>
       ${detailsHtml}
     </div>`;
-            }).join('');
+        }).join('');
+    }
+
+    function filterHistory() {
+        const q = (document.getElementById('histSearch').value || '').trim().toLowerCase();
+        const f = document.getElementById('histFilter').value;
+
+        const filtered = allHistory.filter(n => {
+            const matchesText = !q || (n.title && n.title.toLowerCase().includes(q)) || (n.message && n.message.toLowerCase().includes(q));
+            if (!matchesText) return false;
+
+            if (f === 'success') return n.failed === 0 && n.successful > 0;
+            if (f === 'failed') return n.failed > 0;
+            return true;
+        });
+
+        renderHistoryList(filtered);
+    }
+
+    async function loadHistory(isSilent = false) {
+        try {
+            const r = await fetch(`${API}/notifications/history`);
+            const data = await r.json();
+
+            const currentJson = JSON.stringify(data.notifications);
+            if (currentJson === lastHistoryJson && isSilent) return;
+            lastHistoryJson = currentJson;
+
+            allHistory = data.notifications || [];
+            document.getElementById('statJobs').textContent = data.count || 0;
+            filterHistory();
         } catch (e) {
             if (!isSilent) {
                 document.getElementById('historyList').innerHTML =
@@ -1169,6 +1324,7 @@
         const type = document.getElementById('regType').value;
         const ip = document.getElementById('regIp').value.trim();
         const port = document.getElementById('regPort').value;
+        const topic = (document.getElementById('regTopic').value || 'general').trim();
         const statusEl = document.getElementById('regStatus');
 
         if (!name) { statusEl.innerHTML = '<span style="color:var(--danger)">⚠ Device name is required.</span>'; return; }
@@ -1179,11 +1335,11 @@
         try {
             const r = await fetch(`${API}/devices/register`, {
                 method: 'POST', headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
-                body: JSON.stringify({ name, device_type: type, ip_address: ip, port: parseInt(port) })
+                body: JSON.stringify({ name, device_type: type, ip_address: ip, port: parseInt(port), topic })
             });
             const data = await r.json();
             if (data.success) {
-                statusEl.innerHTML = `<span style="color:var(--success)">✅ Registered: ${data.device.name} (${type})</span>`;
+                statusEl.innerHTML = `<span style="color:var(--success)">✅ Registered: ${data.device.name} (#${data.device.topic || topic})</span>`;
                 document.getElementById('regName').value = '';
                 loadDevices();
             } else {

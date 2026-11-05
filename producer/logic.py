@@ -179,7 +179,7 @@ def check_device_active(device_dict):
         return False
 
 
-def send_web_push(device_dict, title, message):
+def send_web_push(device_dict, title, message, job_id=None):
     """
     Delivers to Web Browsers:
     Uses VAPID webpush if subscription_data exists, otherwise delivers via HTTP /receive.
@@ -189,7 +189,7 @@ def send_web_push(device_dict, title, message):
     if sub_json:
         try:
             subscription = json.loads(sub_json) if isinstance(sub_json, str) else sub_json
-            payload = json.dumps({"title": title, "body": message, "message": message})
+            payload = json.dumps({"job_id": job_id, "title": title, "body": message, "message": message})
 
             webpush(
                 subscription_info=subscription,
@@ -243,6 +243,7 @@ def send_web_push(device_dict, title, message):
         address = f"http://{device_dict['ip_address']}:{device_dict['port']}/receive"
         try:
             payload = {
+                "job_id": job_id,
                 "title": title,
                 "message": message,
                 "from": "Producer API",
@@ -273,7 +274,7 @@ def send_web_push(device_dict, title, message):
             }
 
 
-def send_mobile_push(device_dict, title, message):
+def send_mobile_push(device_dict, title, message, job_id=None):
     """Deliver to Mobile devices via Google Firebase (FCM) or simulated fallback."""
     fcm_token = device_dict.get("subscription_data")
 
@@ -288,7 +289,8 @@ def send_mobile_push(device_dict, title, message):
 
             fcm_msg = messaging.Message(
                 notification=messaging.Notification(title=title, body=message),
-                token=fcm_token
+                token=fcm_token,
+                data={"job_id": str(job_id or "")}
             )
             response = messaging.send(fcm_msg)
             logger.info("Delivered to FCM for '%s' (ID: %s)", device_dict['name'], response)
@@ -322,7 +324,7 @@ def send_mobile_push(device_dict, title, message):
     }
 
 
-def send_pager_notification(device_dict, title, message):
+def send_pager_notification(device_dict, title, message, job_id=None):
     """Deliver alert to Pager systems."""
     time.sleep(0.1)
     logger.info("Pager alert simulated for '%s' (ID: %s)", device_dict['name'], device_dict['id'])
@@ -369,7 +371,7 @@ def process_job(job, app):
         future_map = {}
         for device_dict in target_devices:
             handler = DEVICE_HANDLERS.get(device_dict.get("device_type"), send_web_push)
-            future = executor.submit(handler, device_dict, title, message)
+            future = executor.submit(handler, device_dict, title, message, job_id=job_id)
             future_map[future] = device_dict
 
         for future in as_completed(future_map):

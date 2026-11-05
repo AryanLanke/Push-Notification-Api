@@ -40,6 +40,7 @@ class Device(db.Model):
     ip_address = db.Column(db.String(50), nullable=False, default="127.0.0.1", index=True)
     port = db.Column(db.Integer, nullable=False, default=5001, index=True)
     email = db.Column(db.String(100), default="")
+    topic = db.Column(db.String(50), nullable=False, default="general", index=True)
 
     subscription_data = db.Column(db.Text, nullable=True)
     registered_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -56,6 +57,7 @@ class Device(db.Model):
             "ip_address": self.ip_address,
             "port": self.port,
             "email": self.email,
+            "topic": self.topic or "general",
             "has_subscription": bool(self.subscription_data),
             "address": f"http://{self.ip_address}:{self.port}",
             "registered_at": self.registered_at.isoformat() if self.registered_at else None,
