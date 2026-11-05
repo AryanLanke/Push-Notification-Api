@@ -1,1378 +1,1057 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Producer Dashboard — Notification System</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Cormorant:wght@300;400;500;600;700&display=swap"
-        rel="stylesheet" />
-    <style>
-        /* ══════════════════════════════════════════
-           PRODUCER DASHBOARD — Professional Light Theme
-           Matches Consumer: Clean white · Blue/Teal · Crisp data
-        ══════════════════════════════════════════ */
-        :root {
-            --bg:            #EEF2F7;
-            --surface:       #FFFFFF;
-            --surface2:      #F5F7FA;
-            --surface3:      #EBF0F7;
-            --border:        #D8E0EC;
-            --border-strong: #BEC9DB;
-            --blue:          #2563EB;
-            --blue-hover:    #1D4ED8;
-            --blue-dim:      rgba(37,99,235,0.07);
-            --blue-mid:      rgba(37,99,235,0.15);
-            --teal:          #0D9488;
-            --teal-hover:    #0B7C72;
-            --teal-dim:      rgba(13,148,136,0.08);
-            --success:       #059669;
-            --danger:        #DC2626;
-            --warn:          #D97706;
-            --text:          #0F172A;
-            --text-2:        #334155;
-            --muted:         #64748B;
-            --muted-light:   #94A3B8;
-
-            --r: 10px;
-            --shadow-xs: 0 1px 3px rgba(15,23,42,0.06), 0 1px 2px rgba(15,23,42,0.04);
-            --shadow-sm: 0 2px 8px rgba(15,23,42,0.08), 0 1px 3px rgba(15,23,42,0.05);
-            --shadow-md: 0 6px 20px rgba(15,23,42,0.10), 0 2px 6px rgba(15,23,42,0.06);
-            --shadow-blue: 0 4px 16px rgba(37,99,235,0.18);
-        }
-
-        * { margin:0; padding:0; box-sizing:border-box; }
-
-        body {
-            font-family: 'Inter', 'Segoe UI', sans-serif;
-            background: var(--bg);
-            color: var(--text);
-            min-height: 100vh;
-            -webkit-font-smoothing: antialiased;
-            background-image:
-                linear-gradient(rgba(37,99,235,0.03) 1px, transparent 1px),
-                linear-gradient(90deg, rgba(37,99,235,0.03) 1px, transparent 1px);
-            background-size: 32px 32px;
-        }
-
-        /* ── PAGE WRAPPER ── */
-        .page {
-            max-width: 1120px;
-            margin: 0 auto;
-            padding: 36px 24px;
-        }
-
-        /* ── HEADER ── */
-        .header {
-            position: relative;
-            background: var(--surface);
-            border: 1px solid var(--border);
-            border-radius: var(--r);
-            padding: 28px 32px;
-            margin-bottom: 22px;
-            box-shadow: var(--shadow-sm);
-            overflow: hidden;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-        }
-
-        .header::before {
-            content: '';
-            position: absolute;
-            top: 0; left: 0; right: 0;
-            height: 3px;
-            background: linear-gradient(90deg, var(--blue), var(--teal));
-            border-radius: var(--r) var(--r) 0 0;
-        }
-
-        .header::after {
-            content: '';
-            position: absolute;
-            top: -20px; right: -20px;
-            width: 140px; height: 140px;
-            background: radial-gradient(circle, rgba(37,99,235,0.06), transparent 70%);
-            pointer-events: none;
-        }
-
-        .header h1 {
-            font-family: 'Cormorant', serif;
-            font-weight: 700;
-            font-style: italic;
-            font-size: 1.8rem;
-            letter-spacing: 0.07em;
-            text-transform: uppercase;
-            color: var(--text);
-            margin-bottom: 7px;
-        }
-
-        .header p {
-            color: var(--muted);
-            font-size: 0.8rem;
-            font-family: 'DM Mono', 'Courier New', monospace;
-            letter-spacing: 0.02em;
-        }
-
-        .header-right {
-            display: flex;
-            align-items: center;
-            gap: 14px;
-            flex-shrink: 0;
-        }
-
-        .live-badge {
-            display: inline-flex;
-            align-items: center;
-            gap: 7px;
-            font-size: 0.7rem;
-            font-weight: 600;
-            color: var(--success);
-            font-family: 'DM Mono', monospace;
-            letter-spacing: 0.04em;
-        }
-
-        .live-dot {
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            background: var(--success);
-            box-shadow: 0 0 0 3px rgba(5,150,105,0.18);
-            animation: pulse 2s infinite;
-            flex-shrink: 0;
-        }
-
-        @keyframes pulse {
-            0%, 100% { box-shadow: 0 0 0 3px rgba(5,150,105,0.18); }
-            50%       { box-shadow: 0 0 0 6px rgba(5,150,105,0.05); }
-        }
-
-        .status {
-            display: inline-flex;
-            align-items: center;
-            gap: 7px;
-            padding: 4px 12px;
-            border-radius: 5px;
-            font-size: 0.68rem;
-            font-weight: 700;
-            letter-spacing: 0.08em;
-            font-family: 'DM Mono', monospace;
-            background: rgba(5,150,105,0.09);
-            color: var(--success);
-            border: 1px solid rgba(5,150,105,0.22);
-        }
-
-        /* ── INFO GRID (STATS) ── */
-        .info-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-            gap: 14px;
-            margin-bottom: 22px;
-        }
-
-        .info-card {
-            background: var(--surface);
-            border-radius: var(--r);
-            padding: 18px 20px;
-            border: 1px solid var(--border);
-            box-shadow: var(--shadow-xs);
-            position: relative;
-            overflow: hidden;
-            transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
-            cursor: default;
-        }
-
-        .info-card::after {
-            content: '';
-            position: absolute;
-            bottom: 0; left: 0;
-            height: 2px; width: 100%;
-            background: linear-gradient(90deg, var(--blue), var(--teal));
-            transform: scaleX(0);
-            transform-origin: left;
-            transition: transform 0.28s ease;
-        }
-
-        .info-card:hover {
-            transform: translateY(-2px);
-            box-shadow: var(--shadow-md);
-            border-color: var(--border-strong);
-        }
-
-        .info-card:hover::after { transform: scaleX(1); }
-
-        .info-card label {
-            color: var(--muted);
-            font-size: 0.65rem;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.09em;
-            display: block;
-            margin-bottom: 0;
-        }
-
-        .info-card .value {
-            font-size: 1.2rem;
-            font-weight: 700;
-            margin-top: 8px;
-            color: var(--text);
-            letter-spacing: -0.02em;
-            font-family: 'DM Mono', 'Courier New', monospace;
-        }
-
-        .info-card .value.blue { color: var(--blue); }
-        .info-card .value.teal { color: var(--teal); }
-        .info-card .value.green { color: var(--success); }
-
-        /* ── CONTENT GRID ── */
-        .grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 20px;
-        }
-
-        @media(max-width: 800px) {
-            .grid { grid-template-columns: 1fr; }
-        }
-
-        /* ── CARDS ── */
-        .card {
-            position: relative;
-            background: var(--surface);
-            border: 1px solid var(--border);
-            border-radius: var(--r);
-            padding: 24px;
-            box-shadow: var(--shadow-sm);
-            overflow: hidden;
-        }
-
-        .card::before {
-            content: '';
-            position: absolute;
-            top: 0; left: 0; right: 0;
-            height: 2px;
-            background: linear-gradient(90deg, var(--blue), var(--teal));
-            border-radius: var(--r) var(--r) 0 0;
-            opacity: 0;
-            transition: opacity 0.25s;
-        }
-
-        .card:hover::before { opacity: 1; }
-
-        /* ── SECTION HEADING ── */
-        .section-title {
-            font-size: 0.68rem;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 0.1em;
-            color: var(--muted);
-            margin-bottom: 18px;
-            padding-bottom: 11px;
-            border-bottom: 1px solid var(--border);
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .section-title button {
-            margin-left: auto;
-            background: none;
-            border: 1px solid var(--border);
-            color: var(--muted);
-            cursor: pointer;
-            font-size: 0.72rem;
-            font-family: inherit;
-            font-weight: 500;
-            padding: 3px 9px;
-            border-radius: 5px;
-            transition: all 0.15s;
-        }
-
-        .section-title button:hover {
-            border-color: var(--blue);
-            color: var(--blue);
-            background: var(--blue-dim);
-        }
-
-        /* ── FORM ELEMENTS ── */
-        .form-label {
-            display: block;
-            font-size: 0.73rem;
-            font-weight: 600;
-            color: var(--text-2);
-            margin-bottom: 5px;
-            letter-spacing: 0.01em;
-        }
-
-        input, select, textarea {
-            width: 100%;
-            padding: 9px 12px;
-            border-radius: 6px;
-            background: var(--surface);
-            border: 1px solid var(--border-strong);
-            color: var(--text);
-            font-family: inherit;
-            font-size: 0.86rem;
-            margin-bottom: 14px;
-            transition: border-color 0.15s, box-shadow 0.15s;
-            box-shadow: var(--shadow-xs);
-        }
-
-        input:focus, select:focus, textarea:focus {
-            outline: none;
-            border-color: var(--blue);
-            box-shadow: 0 0 0 3px rgba(37,99,235,0.12);
-        }
-
-        input::placeholder, textarea::placeholder {
-            color: var(--muted-light);
-        }
-
-        textarea { resize: vertical; min-height: 78px; }
-
-        select {
-            appearance: none;
-            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%2364748B' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
-            background-repeat: no-repeat;
-            background-position: right 12px center;
-            padding-right: 32px;
-        }
-
-        /* ── BUTTONS ── */
-        .btn {
-            width: 100%;
-            padding: 10px 16px;
-            border: none;
-            border-radius: 6px;
-            font-family: inherit;
-            font-size: 0.86rem;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.2s;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 8px;
-            letter-spacing: 0.01em;
-        }
-
-        .btn-send {
-            background: var(--blue);
-            color: #fff;
-            box-shadow: var(--shadow-blue);
-        }
-
-        .btn-send:hover {
-            background: var(--blue-hover);
-            transform: translateY(-1px);
-            box-shadow: 0 6px 20px rgba(37,99,235,0.28);
-        }
-
-        .btn-register {
-            background: var(--teal);
-            color: #fff;
-            box-shadow: 0 4px 16px rgba(13,148,136,0.18);
-        }
-
-        .btn-register:hover {
-            background: var(--teal-hover);
-            transform: translateY(-1px);
-            box-shadow: 0 6px 20px rgba(13,148,136,0.28);
-        }
-
-        .btn:disabled {
-            opacity: 0.55;
-            cursor: not-allowed;
-            transform: none !important;
-            box-shadow: none !important;
-        }
-
-        /* ── DEVICE LIST ── */
-        .device-list {
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-            max-height: 360px;
-            overflow-y: auto;
-        }
-
-        .device-item {
-            background: var(--surface2);
-            border-radius: 6px;
-            padding: 12px 14px;
-            border: 1px solid var(--border);
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            animation: fadeUp 0.25s ease;
-            transition: transform 0.2s, border-color 0.15s;
-        }
-
-        .device-item:hover {
-            border-color: var(--border-strong);
-            transform: translateX(3px);
-        }
-
-        .device-left {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
-
-        .device-icon {
-            width: 34px;
-            height: 34px;
-            border-radius: 6px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 1rem;
-            background: var(--blue-dim);
-            border: 1px solid rgba(37,99,235,0.12);
-            flex-shrink: 0;
-        }
-
-        .device-name {
-            font-weight: 600;
-            font-size: 0.85rem;
-            color: var(--text);
-        }
-
-        .device-addr {
-            font-size: 0.72rem;
-            color: var(--muted);
-            margin-top: 2px;
-            display: flex;
-            align-items: center;
-            gap: 6px;
-        }
-
-        .type-badge {
-            font-size: 0.64rem;
-            font-weight: 700;
-            padding: 2px 7px;
-            border-radius: 4px;
-            letter-spacing: 0.04em;
-        }
-
-        .type-web    { background: rgba(37,99,235,0.08); color: var(--blue); }
-        .type-mobile { background: rgba(5,150,105,0.08); color: var(--success); }
-        .type-pager  { background: rgba(217,119,6,0.08); color: var(--warn); }
-
-        .del-btn {
-            background: transparent;
-            border: 1px solid var(--border-strong);
-            color: var(--muted);
-            padding: 5px 10px;
-            border-radius: 5px;
-            cursor: pointer;
-            font-size: 0.74rem;
-            font-family: inherit;
-            font-weight: 500;
-            transition: all 0.15s;
-            flex-shrink: 0;
-        }
-
-        .del-btn:hover {
-            background: rgba(220,38,38,0.06);
-            border-color: rgba(220,38,38,0.4);
-            color: var(--danger);
-        }
-
-        .ping-btn {
-            background: transparent;
-            border: 1px solid var(--border-strong);
-            color: var(--blue);
-            padding: 5px 9px;
-            border-radius: 5px;
-            cursor: pointer;
-            font-size: 0.72rem;
-            font-family: inherit;
-            font-weight: 600;
-            transition: all 0.15s;
-            flex-shrink: 0;
-            display: inline-flex;
-            align-items: center;
-            gap: 4px;
-        }
-
-        .ping-btn:hover {
-            background: var(--blue-dim);
-            border-color: var(--blue);
-        }
-
-        .latency-badge {
-            font-size: 0.65rem;
-            font-family: 'DM Mono', monospace;
-            padding: 2px 6px;
-            border-radius: 4px;
-            font-weight: 600;
-            letter-spacing: 0.02em;
-        }
-        .latency-online { background: rgba(5,150,105,0.09); color: var(--success); border: 1px solid rgba(5,150,105,0.2); }
-        .latency-offline { background: rgba(220,38,38,0.08); color: var(--danger); border: 1px solid rgba(220,38,38,0.2); }
-
-        /* ── DEVICE CHECK LIST ── */
-        .device-check-list {
-            background: var(--surface);
-            border: 1px solid var(--border-strong);
-            border-radius: 6px;
-            padding: 4px 0;
-            max-height: 180px;
-            overflow-y: auto;
-            margin-bottom: 14px;
-            box-shadow: var(--shadow-xs);
-        }
-
-        .device-check-item {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            padding: 8px 12px;
-            cursor: pointer;
-            transition: background 0.1s;
-        }
-
-        .device-check-item:hover { background: var(--surface2); }
-
-        .device-check-item input[type=checkbox] {
-            width: 15px; height: 15px;
-            accent-color: var(--blue);
-            cursor: pointer;
-            margin: 0;
-            flex-shrink: 0;
-        }
-
-        .device-check-item label {
-            margin: 0;
-            color: var(--text-2);
-            font-size: 0.82rem;
-            font-weight: 400;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            gap: 7px;
-        }
-
-        .device-check-item.all-item {
-            border-bottom: 1px solid var(--border);
-        }
-
-        .device-check-item.all-item label {
-            font-weight: 600;
-            color: var(--teal);
-        }
-
-        /* ── HISTORY & QUEUE ── */
-        .history-list {
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-            max-height: 400px;
-            overflow-y: auto;
-        }
-
-        .history-item {
-            position: relative;
-            background: var(--surface2);
-            border-radius: 6px;
-            padding: 12px 14px 12px 17px;
-            border: 1px solid var(--border);
-            overflow: hidden;
-            animation: fadeUp 0.25s ease;
-            transition: transform 0.2s, box-shadow 0.2s, border-color 0.15s;
-        }
-
-        .history-item::before {
-            content: '';
-            position: absolute;
-            top: 0; left: 0; bottom: 0;
-            width: 3px;
-            background: linear-gradient(180deg, var(--blue), var(--teal));
-        }
-
-        .history-item:hover {
-            border-color: var(--border-strong);
-            transform: translateX(3px);
-            box-shadow: var(--shadow-sm);
-        }
-
-        .history-item.success::before { background: var(--success); }
-        .history-item.partial::before { background: var(--warn); }
-
-        .history-title {
-            font-weight: 600;
-            font-size: 0.85rem;
-            color: var(--text);
-        }
-
-        .history-msg {
-            color: var(--muted);
-            font-size: 0.77rem;
-            margin-top: 3px;
-            line-height: 1.4;
-        }
-
-        .history-meta {
-            display: flex;
-            gap: 8px;
-            flex-wrap: wrap;
-            margin-top: 8px;
-            align-items: center;
-        }
-
-        .hm-chip {
-            font-size: 0.67rem;
-            font-weight: 600;
-            padding: 2px 8px;
-            border-radius: 4px;
-            letter-spacing: 0.02em;
-        }
-
-        .hm-ok   { background: rgba(5,150,105,0.08); color: var(--success); }
-        .hm-fail { background: rgba(220,38,38,0.08); color: var(--danger); }
-        .hm-queue { background: var(--blue-dim); color: var(--blue); }
-
-        .hm-time {
-            color: var(--muted-light);
-            font-size: 0.67rem;
-            font-weight: 500;
-            margin-left: auto;
-        }
-
-        .toggle-arrow {
-            font-size: 0.65rem;
-            color: var(--muted-light);
-            margin-left: 6px;
-            transition: transform 0.2s;
-        }
-
-        .history-item.open .toggle-arrow { transform: rotate(180deg); }
-
-        /* ── TOAST ── */
-        #toast {
-            position: fixed;
-            bottom: 24px;
-            right: 24px;
-            background: var(--surface);
-            border: 1px solid var(--border);
-            border-radius: var(--r);
-            padding: 16px 20px;
-            min-width: 300px;
-            box-shadow: var(--shadow-md);
-            display: none;
-            z-index: 999;
-            animation: fadeUp 0.25s ease;
-            overflow: hidden;
-        }
-
-        #toast::before {
-            content: '';
-            position: absolute;
-            top: 0; left: 0; right: 0;
-            height: 3px;
-            background: linear-gradient(90deg, var(--blue), var(--teal));
-        }
-
-        .toast-title {
-            font-weight: 700;
-            margin-bottom: 4px;
-            font-size: 0.85rem;
-            color: var(--text);
-        }
-
-        .toast-body {
-            font-size: 0.78rem;
-            color: var(--muted);
-            line-height: 1.4;
-        }
-
-        .toast-status {
-            display: inline-block;
-            padding: 3px 9px;
-            border-radius: 4px;
-            font-size: 0.66rem;
-            font-weight: 700;
-            margin-top: 10px;
-            letter-spacing: 0.05em;
-        }
-
-        .s-queued     { background: var(--blue-dim); color: var(--blue); }
-        .s-processing { background: rgba(217,119,6,0.1); color: var(--warn); }
-        .s-completed  { background: rgba(5,150,105,0.1); color: var(--success); }
-
-        /* ── EMPTY STATE ── */
-        .empty {
-            text-align: center;
-            padding: 36px 20px;
-            color: var(--muted-light);
-        }
-
-        .empty-icon {
-            font-size: 2rem;
-            margin-bottom: 8px;
-            display: block;
-            animation: float 3s ease-in-out infinite;
-        }
-
-        .empty p {
-            font-size: 0.82rem;
-            line-height: 1.5;
-        }
-
-        /* ── STATUS MESSAGES ── */
-        #regStatus, #sendStatus {
-            font-size: 0.8rem;
-            line-height: 1.4;
-        }
-
-        /* ── ANIMATIONS ── */
-        @keyframes fadeUp {
-            from { opacity: 0; transform: translateY(8px); }
-            to   { opacity: 1; transform: translateY(0); }
-        }
-
-        @keyframes float {
-            0%, 100% { transform: translateY(0); }
-            50%       { transform: translateY(-7px); }
-        }
-
-        /* ── SCROLLBARS ── */
-        ::-webkit-scrollbar { width: 4px; }
-        ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 4px; }
-        ::-webkit-scrollbar-thumb:hover { background: var(--muted-light); }
-    </style>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Relay — Dispatch Console</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  /* ══════════════════════════════════════════════════════════════
+     DIRECTION 01 — INSTRUMENT PANEL
+     Warm paper, near-black rail, hairline rules, one burnt accent.
+     No shadows, no gradients, no emoji, no pill radii.
+  ══════════════════════════════════════════════════════════════ */
+  :root{
+    --paper:#F4F3EE;
+    --surface:#FBFAF6;
+    --surface-2:#F7F6F0;
+    --rail:#17191B;
+    --rail-2:#1F2224;
+    --rail-line:#2C3033;
+    --ink:#15171A;
+    --ink-2:#3D4147;
+    --muted:#767A7B;
+    --faint:#A3A6A3;
+    --line:#E2E0D6;
+    --line-soft:#EDEBE2;
+    --line-strong:#CFCCC1;
+    --accent:#BE4527;
+    --accent-dark:#A0381F;
+    --ok:#1C6B56;
+    --warn:#9A6812;
+    --bad:#A32E24;
+    --queued:#6C7580;
+    --mono:"IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    --sans:"Archivo","Helvetica Neue",Arial,sans-serif;
+    --r:2px;
+    --rail-w:232px;
+  }
+
+  *{margin:0;padding:0;box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  body{
+    font-family:var(--sans);
+    background:var(--paper);
+    color:var(--ink);
+    -webkit-font-smoothing:antialiased;
+    font-size:13px;
+    line-height:1.45;
+  }
+  a{color:inherit;text-decoration:none}
+  button{font-family:inherit;font-size:inherit;color:inherit;background:none;border:0;cursor:pointer}
+  ::selection{background:#EFD9CF}
+
+  /* ── shell ── */
+  .app{display:grid;grid-template-columns:var(--rail-w) minmax(0,1fr);min-height:100vh}
+  .rail{
+    background:var(--rail);color:#C6C3BA;
+    position:sticky;top:0;height:100vh;
+    display:flex;flex-direction:column;
+    padding:18px 0 14px;
+  }
+  .brand{display:flex;align-items:center;gap:10px;padding:0 18px 22px;border-bottom:1px solid var(--rail-line);margin-bottom:14px}
+  .brand svg{flex:0 0 auto;color:var(--accent)}
+  .brand .name{font-size:15px;font-weight:600;letter-spacing:.01em;color:#F3F1E9;line-height:1.1}
+  .brand .caption{font-family:var(--mono);font-size:8.5px;letter-spacing:.16em;text-transform:uppercase;color:#7E827E;margin-top:4px}
+
+  .nav-label{font-family:var(--mono);font-size:8.5px;letter-spacing:.16em;text-transform:uppercase;color:#6B6F6E;padding:0 18px;margin:14px 0 8px}
+  .navitem{
+    display:flex;align-items:center;gap:11px;
+    padding:8px 18px 8px 16px;
+    border-left:2px solid transparent;
+    font-size:12.5px;color:#A5A8A3;
+  }
+  .navitem svg{opacity:.75}
+  .navitem:hover{background:var(--rail-2);color:#EFEDE5}
+  .navitem.active{border-left-color:var(--accent);background:var(--rail-2);color:#F6F4EC}
+  .navitem.active svg{opacity:1;color:var(--accent)}
+  .navitem .tag{
+    margin-left:auto;font-family:var(--mono);font-size:9px;letter-spacing:.06em;
+    color:#8E918C;border:1px solid var(--rail-line);padding:1px 4px;border-radius:var(--r);
+  }
+  .navitem.off{color:#636764;cursor:default}
+  .navitem.off:hover{background:transparent;color:#636764}
+
+  .rail-foot{margin-top:auto;padding:14px 18px 0;border-top:1px solid var(--rail-line)}
+  .rail-foot .row{display:flex;justify-content:space-between;gap:8px;font-family:var(--mono);font-size:9.5px;color:#7D817D;line-height:2}
+  .rail-foot .row b{font-weight:400;color:#B9BBB4}
+  .rail-foot .stamp{margin-top:12px;font-family:var(--mono);font-size:8.5px;letter-spacing:.12em;text-transform:uppercase;color:#5F6360;line-height:1.7}
+
+  /* ── top bar ── */
+  .main{min-width:0;display:flex;flex-direction:column}
+  .topbar{
+    display:flex;align-items:center;gap:14px;
+    padding:13px 28px;border-bottom:1px solid var(--line);
+    background:rgba(244,243,238,.94);backdrop-filter:blur(8px);
+    position:sticky;top:0;z-index:30;
+  }
+  .crumb{font-family:var(--mono);font-size:10.5px;letter-spacing:.04em;color:var(--faint);display:flex;align-items:center;gap:7px}
+  .crumb b{color:var(--ink);font-weight:500}
+  .crumb .sep{color:var(--line-strong)}
+  .topbar .grow{flex:1}
+  .search{
+    display:flex;align-items:center;gap:8px;
+    border:1px solid var(--line);background:var(--surface);
+    height:30px;padding:0 9px;min-width:240px;border-radius:var(--r);
+    color:var(--muted);
+  }
+  .search input{border:0;background:none;outline:none;font-family:var(--mono);font-size:10.5px;width:100%;color:var(--ink)}
+  .search kbd{font-family:var(--mono);font-size:9px;color:var(--faint);border:1px solid var(--line);padding:1px 4px;border-radius:var(--r)}
+
+  .chip{
+    display:inline-flex;align-items:center;gap:6px;
+    font-family:var(--mono);font-size:9px;letter-spacing:.12em;text-transform:uppercase;
+    padding:4px 7px;border:1px solid var(--line);background:var(--surface);border-radius:var(--r);
+    color:var(--ink-2);white-space:nowrap;
+  }
+  .chip i{width:5px;height:5px;display:block;background:currentColor}
+  .chip.ok{color:var(--ok);border-color:#CFDDD6}
+  .chip.warn{color:var(--warn);border-color:#E3D7BC}
+  .chip.bad{color:var(--bad);border-color:#E2C8C4}
+  .chip.queued{color:var(--queued)}
+  .chip.live i{animation:blink 2.4s ease-in-out infinite}
+  @keyframes blink{0%,100%{opacity:1}50%{opacity:.25}}
+
+  .btn{
+    display:inline-flex;align-items:center;justify-content:center;gap:7px;
+    height:31px;padding:0 13px;border-radius:var(--r);
+    font-size:12px;font-weight:500;letter-spacing:.01em;white-space:nowrap;
+    border:1px solid var(--line-strong);background:var(--surface);color:var(--ink);
+    transition:background .12s ease, border-color .12s ease, color .12s ease;
+  }
+  .btn:hover{background:var(--surface-2);border-color:var(--ink-2)}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:#FCF8F5}
+  .btn.primary:hover{background:var(--accent-dark);border-color:var(--accent-dark)}
+  .btn.ghost{background:transparent;border-color:transparent;color:var(--ink-2);padding:0 8px}
+  .btn.ghost:hover{background:var(--surface-2);border-color:transparent;color:var(--ink)}
+  .btn.sm{height:26px;padding:0 9px;font-size:11px}
+
+  /* ── layout ── */
+  .view{display:block}
+  .view[hidden]{display:none}
+  .body{padding:22px 28px 48px;max-width:1560px}
+  .body > * + *{margin-top:16px}
+
+  .page-head{display:flex;align-items:flex-end;justify-content:space-between;gap:24px;padding-bottom:14px;border-bottom:1px solid var(--line)}
+  .page-head h1{font-size:21px;font-weight:600;letter-spacing:-.015em;line-height:1.2}
+  .page-head p{font-family:var(--mono);font-size:10.5px;color:var(--muted);margin-top:6px;letter-spacing:.02em}
+  .page-head .right{display:flex;align-items:center;gap:8px}
+
+  /* KPI strip */
+  .kpis{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));border:1px solid var(--line);background:var(--surface)}
+  .kpi{padding:14px 16px 13px;border-left:1px solid var(--line);min-width:0}
+  .kpi:first-child{border-left:0}
+  .kpi .lab{font-family:var(--mono);font-size:8.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);display:flex;align-items:center;gap:6px}
+  .kpi .lab .mark{width:4px;height:4px;background:var(--line-strong)}
+  .kpi .num{
+    font-family:var(--mono);font-size:28px;font-weight:500;letter-spacing:-.035em;
+    line-height:1.05;margin-top:9px;font-variant-numeric:tabular-nums;
+  }
+  .kpi .num small{font-size:13px;letter-spacing:0;color:var(--muted);font-weight:400}
+  .kpi .foot{font-family:var(--mono);font-size:9.5px;color:var(--faint);margin-top:7px;letter-spacing:.02em}
+  .kpi .foot .up{color:var(--ok)}
+
+  /* panels */
+  .grid{display:grid;grid-template-columns:1.62fr 1fr;gap:16px;align-items:start}
+  .grid.two{grid-template-columns:1fr 1fr}
+  .grid.split{grid-template-columns:1.45fr 1fr}
+  .panel{background:var(--surface);border:1px solid var(--line);min-width:0}
+  .panel-h{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 16px;border-bottom:1px solid var(--line)}
+  .panel-h h2{font-size:12.5px;font-weight:600;letter-spacing:.005em}
+  .panel-h .meta{font-family:var(--mono);font-size:9.5px;color:var(--faint);letter-spacing:.04em}
+  .panel-h .tools{display:flex;align-items:center;gap:10px}
+  .panel-b{padding:16px}
+  .panel-b.flush{padding:0;overflow-x:auto}
+
+  .seg{display:inline-flex;border:1px solid var(--line);border-radius:var(--r);overflow:hidden;background:var(--surface)}
+  .seg button{font-family:var(--mono);font-size:9.5px;letter-spacing:.08em;padding:4px 8px;color:var(--muted);border-left:1px solid var(--line)}
+  .seg button:first-child{border-left:0}
+  .seg button:hover{background:var(--surface-2);color:var(--ink)}
+  .seg button[aria-pressed="true"]{background:var(--ink);color:#F7F5EE}
+
+  /* chart */
+  .chart{display:flex;gap:10px}
+  .yaxis{display:flex;flex-direction:column;justify-content:space-between;font-family:var(--mono);font-size:8.5px;color:var(--faint);padding:2px 0 18px}
+  .plot{flex:1;min-width:0}
+  .plot svg{display:block;width:100%;height:auto}
+  .xaxis{display:flex;justify-content:space-between;font-family:var(--mono);font-size:8.5px;color:var(--faint);letter-spacing:.04em;padding-top:7px;border-top:1px solid var(--line-soft);margin-top:-1px}
+  .legend{display:flex;align-items:center;gap:16px;font-family:var(--mono);font-size:9px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding:0 16px 12px}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .swatch-line{width:14px;height:2px;background:var(--ink)}
+  .swatch-line.b{background:var(--accent)}
+  .swatch-line.d{background:var(--line-strong)}
+
+  /* worker rows */
+  .worker{display:grid;grid-template-columns:52px 1fr 74px;gap:10px;align-items:center;padding:10px 16px;border-bottom:1px solid var(--line-soft)}
+  .worker:last-child{border-bottom:0}
+  .worker .id{font-family:var(--mono);font-size:10.5px;color:var(--ink)}
+  .worker .job{font-family:var(--mono);font-size:9.5px;color:var(--muted);margin-top:3px;letter-spacing:.02em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .worker .bar{height:3px;background:var(--line-soft);margin-top:6px;position:relative;overflow:hidden;max-width:190px}
+  .worker .bar b{position:absolute;inset:0 auto 0 0;background:var(--ink)}
+  .worker .bar b.hot{background:var(--accent)}
+  .worker .state{text-align:right}
+
+  /* tables */
+  table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+  thead th{
+    font-family:var(--mono);font-size:8.5px;font-weight:500;letter-spacing:.12em;text-transform:uppercase;
+    color:var(--muted);text-align:left;padding:8px 16px;background:var(--surface-2);
+    border-bottom:1px solid var(--line);white-space:nowrap;
+  }
+  tbody td{padding:0 16px;height:44px;border-bottom:1px solid var(--line-soft);font-size:12.5px;color:var(--ink-2);vertical-align:middle;white-space:nowrap}
+  tbody tr:last-child td{border-bottom:0}
+  tbody tr:hover td{background:var(--surface-2)}
+  td.mono,th.mono{font-family:var(--mono);font-size:10.5px;letter-spacing:.01em;color:var(--muted)}
+  td .title{color:var(--ink);font-weight:500;display:block;white-space:normal}
+  td .sub{font-family:var(--mono);font-size:9.5px;color:var(--faint);margin-top:2px}
+  .num-r{text-align:right}
+  .topic{
+    font-family:var(--mono);font-size:9.5px;letter-spacing:.02em;color:var(--ink-2);
+    border:1px solid var(--line);padding:2px 5px;border-radius:var(--r);background:var(--surface);
+  }
+  .meter{display:flex;align-items:center;gap:7px}
+  .meter .track{width:52px;height:3px;background:var(--line-soft);position:relative}
+  .meter .track b{position:absolute;inset:0 auto 0 0;background:var(--ink)}
+  .meter .track b.bad{background:var(--bad)}
+  .meter .track b.ok{background:var(--ok)}
+  .meter span{font-family:var(--mono);font-size:10px;color:var(--muted)}
+  .tbl-tools{display:flex;align-items:center;gap:8px}
+  .link{font-family:var(--mono);font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--accent);border-bottom:1px solid #E3C3B8;padding-bottom:1px}
+  .link:hover{border-bottom-color:var(--accent)}
+
+  .foot-note{font-family:var(--mono);font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);padding:8px 16px;border-top:1px solid var(--line-soft);display:flex;justify-content:space-between;gap:12px;background:var(--surface)}
+
+  /* form */
+  .field{margin-bottom:13px}
+  .field > label{display:block;font-family:var(--mono);font-size:8.5px;letter-spacing:.13em;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
+  input[type=text], input[type=number], input[type=datetime-local], textarea, select{
+    width:100%;border:1px solid var(--line-strong);background:#FFFEFB;border-radius:var(--r);
+    font-family:var(--sans);font-size:13px;color:var(--ink);padding:0 10px;height:33px;outline:none;
+    transition:border-color .12s ease;
+  }
+  textarea{height:auto;padding:9px 10px;resize:vertical;line-height:1.5}
+  input:focus, textarea:focus, select:focus{border-color:var(--ink)}
+  .hint{font-family:var(--mono);font-size:9.5px;color:var(--faint);margin-top:5px;letter-spacing:.02em}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .target{display:grid;grid-template-columns:repeat(3,1fr);border:1px solid var(--line-strong);background:#FFFEFB;border-radius:var(--r);overflow:hidden}
+  .target button{padding:7px 8px;font-family:var(--mono);font-size:9.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);border-left:1px solid var(--line);text-align:center}
+  .target button:first-child{border-left:0}
+  .target button[aria-pressed="true"]{background:var(--ink);color:#F7F5EE}
+
+  .devpick{border:1px solid var(--line);background:#FFFEFB;max-height:150px;overflow:auto}
+  .devpick label{display:flex;align-items:center;gap:9px;padding:8px 11px;border-bottom:1px solid var(--line-soft);font-size:12px;cursor:pointer}
+  .devpick label:last-child{border-bottom:0}
+  .devpick label:hover{background:var(--surface-2)}
+  input[type=checkbox]{accent-color:var(--ink);width:13px;height:13px;margin:0}
+  .devpick .meta{margin-left:auto;font-family:var(--mono);font-size:9.5px;color:var(--faint)}
+
+  .form-foot{display:flex;align-items:center;gap:10px;margin-top:20px;padding-top:16px;border-top:1px solid var(--line)}
+  .form-foot .hint{margin:0 0 0 auto;text-align:right}
+
+  /* preview card */
+  .pushcard{border:1px solid var(--line);background:#FFFEFB;padding:13px 14px;border-radius:3px;border-left:2px solid var(--accent)}
+  .pushcard .top{display:flex;align-items:center;gap:7px;font-family:var(--mono);font-size:8.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+  .pushcard h3{font-size:13.5px;font-weight:600;margin:9px 0 4px;letter-spacing:-.005em}
+  .pushcard p{font-size:12px;color:var(--ink-2);line-height:1.5}
+
+  pre.json{
+    background:var(--rail);color:#D7D4CA;border-radius:var(--r);
+    padding:13px;font-family:var(--mono);font-size:10.5px;line-height:1.75;overflow:auto;
+    border:1px solid #24282A;
+  }
+  pre.json .k{color:#9DB8B0}
+  pre.json .s{color:#D9A98E}
+  pre.json .p{color:#7C807C}
+  pre.json .n{color:#B9B9A5}
+
+  .kv{display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-bottom:1px solid var(--line-soft);font-size:12px}
+  .kv:last-child{border-bottom:0}
+  .kv span{color:var(--muted)}
+  .kv b{font-family:var(--mono);font-size:10.5px;font-weight:400;color:var(--ink)}
+
+  .filter-row{display:flex;align-items:center;gap:8px;padding:11px 16px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+  .fchip{font-family:var(--mono);font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);padding:3px 7px;border-radius:var(--r);border:1px solid transparent}
+  .fchip:hover{background:var(--surface-2);color:var(--ink)}
+  .fchip[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:#F7F5EE}
+  .fchip .n{color:var(--faint);margin-left:4px}
+  .fchip[aria-pressed="true"] .n{color:#B9B7AE}
+
+  @media (max-width:1040px){
+    .grid.split{grid-template-columns:1fr}
+    .kpis{grid-template-columns:repeat(2,1fr)}
+    .kpi{border-left:1px solid var(--line)}
+    .kpi:nth-child(odd){border-left:0}
+    .kpi:nth-child(n+3){border-top:1px solid var(--line)}
+    .grid{grid-template-columns:1fr}
+  }
+  @media (max-width:860px){
+    :root{--rail-w:0px}
+    .app{grid-template-columns:1fr}
+    .rail{
+      position:static;height:auto;flex-direction:row;align-items:center;
+      gap:2px;padding:9px 12px;overflow-x:auto;
+      scrollbar-width:none;
+    }
+    .rail::-webkit-scrollbar{display:none}
+    .brand{padding:0 12px 0 0;margin:0;border-bottom:0;border-right:1px solid var(--rail-line);flex:0 0 auto}
+    .brand .caption{display:none}
+    .nav-label,.rail-foot{display:none}
+    .navitem{padding:7px 10px;border-left:0;border-bottom:2px solid transparent;flex:0 0 auto}
+    .navitem.active{border-left:0;border-bottom-color:var(--accent);background:transparent}
+    .navitem .tag{display:none}
+    .body{padding:16px 14px 40px}
+    .topbar{padding:11px 14px;flex-wrap:nowrap;gap:8px}
+    .topbar .grow{display:none}
+    .topbar .search{display:none}
+    .topbar .chip.ok.live{display:none}
+    .topbar .crumb{flex:1}
+    .kpis{grid-template-columns:1fr}
+    .kpi{border-left:0;border-top:1px solid var(--line)}
+    .kpi:first-child{border-top:0}
+    .page-head{flex-direction:column;align-items:flex-start;gap:12px}
+    .page-head p{white-space:normal}
+    .row2{grid-template-columns:1fr}
+    .form-foot{flex-wrap:wrap}
+    .form-foot .hint{margin:0;text-align:left;width:100%}
+  }
+</style>
 </head>
-
 <body>
-<div class="page">
+<div class="app">
 
-    <!-- HEADER -->
-    <div class="header">
-        <div>
-            <h1>Notification Producer</h1>
-            <p>Admin Dashboard — REST API on Port 5000</p>
-        </div>
-        <div class="header-right">
-            <a href="/docs" target="_blank" style="text-decoration:none;font-size:0.75rem;font-weight:600;color:var(--blue);background:var(--blue-dim);border:1px solid rgba(37,99,235,0.25);padding:4px 10px;border-radius:5px;transition:all 0.15s;">📘 Interactive Docs</a>
-            <a href="/metrics" target="_blank" style="text-decoration:none;font-size:0.75rem;font-weight:600;color:var(--teal);background:var(--teal-dim);border:1px solid rgba(13,148,136,0.25);padding:4px 10px;border-radius:5px;transition:all 0.15s;">📊 Metrics</a>
-            <span class="status">● ONLINE</span>
-            <span class="live-badge" id="liveBadge">
-                <div class="live-dot"></div>
-                <span id="netIp">Loading...</span>
-            </span>
-        </div>
+  <!-- ════════ RAIL ════════ -->
+  <aside class="rail">
+    <div class="brand">
+      <svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path d="M3 6h11M3 11h16M3 16h8"/>
+        <circle cx="17.5" cy="6" r="1.6" fill="currentColor" stroke="none"/>
+      </svg>
+      <div>
+        <div class="name">relay</div>
+        <div class="caption">dispatch console</div>
+      </div>
     </div>
 
-    <!-- STATS ROW -->
-    <div class="info-grid">
-        <div class="info-card">
-            <label>Registered Devices</label>
-            <div class="value blue" id="statDevices">—</div>
-        </div>
-        <div class="info-card">
-            <label>Notifications Sent</label>
-            <div class="value teal" id="statJobs">—</div>
-        </div>
-        <div class="info-card">
-            <label>Worker Threads</label>
-            <div class="value green">5</div>
-        </div>
+    <div class="nav-label">Workspace</div>
+    <a class="navitem active" href="#" data-nav="overview">
+      <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="2" y="2" width="5" height="5"/><rect x="9" y="2" width="5" height="5"/><rect x="2" y="9" width="5" height="5"/><rect x="9" y="9" width="5" height="5"/></svg>
+      Overview
+    </a>
+    <a class="navitem" href="#" data-nav="compose">
+      <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M14 2 2 7l4.5 1.8L8 14z"/><path d="M14 2 6.5 8.8"/></svg>
+      Compose
+    </a>
+    <a class="navitem" href="#" data-nav="devices">
+      <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="1.5" y="2.5" width="13" height="8.5"/><path d="M5.5 14h5M8 11v3"/></svg>
+      Devices
+      <span class="tag" id="railDevCount">0</span>
+    </a>
+
+    <div class="nav-label">Delivery</div>
+    <a class="navitem" href="/docs" target="_blank">
+      <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M2 4h12M2 8h12M2 12h7"/></svg>
+      OpenAPI Docs ↗
+    </a>
+    <a class="navitem" href="/metrics" target="_blank">
+      <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M2.5 13V9M8 13V4M13.5 13V6.5"/></svg>
+      Prometheus ↗
+    </a>
+
+    <div class="rail-foot">
+      <div class="row"><span>env</span><b>production</b></div>
+      <div class="row"><span>workers</span><b>5 threads</b></div>
+      <div class="row"><span>status</span><b class="ok" id="railStatusText">healthy</b></div>
+      <div class="stamp">Relay Dispatch Engine<br>System Port 5000</div>
     </div>
+  </aside>
 
-    <!-- MAIN GRID -->
-    <div class="grid">
+  <!-- ════════ MAIN ════════ -->
+  <div class="main">
+    <header class="topbar">
+      <div class="crumb"><span>producer</span><span class="sep">/</span><b id="crumbNow">overview</b></div>
+      <div class="grow"></div>
+      <div class="search">
+        <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5 14 14"/></svg>
+        <input id="globalSearch" placeholder="filter jobs & devices" aria-label="Search" oninput="applyFilter(this.value)">
+      </div>
+      <span class="chip ok live" id="mainSseChip"><i></i>SSE live</span>
+      <button class="btn primary" data-nav="compose">
+        <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M8 3v10M3 8h10"/></svg>
+        New notification
+      </button>
+    </header>
 
-        <!-- LEFT COLUMN -->
-        <div style="display:flex;flex-direction:column;gap:20px;">
-
-            <!-- REGISTER DEVICE -->
-            <div class="card">
-                <div class="section-title"><span>📲</span> Register Device</div>
-                <label class="form-label">Device Name</label>
-                <input id="regName" type="text" placeholder="Enter your device name" />
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-                    <div>
-                        <label class="form-label">Device Type</label>
-                        <select id="regType">
-                            <option value="web">🌐 Web</option>
-                            <option value="mobile">📱 Mobile</option>
-                            <option value="pager">📟 Pager</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label class="form-label">Port</label>
-                        <input id="regPort" type="number" value="5001" />
-                    </div>
-                </div>
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-                    <div>
-                        <label class="form-label">IP Address</label>
-                        <input id="regIp" type="text" value="127.0.0.1" />
-                    </div>
-                    <div>
-                        <label class="form-label">Topic / Channel</label>
-                        <input id="regTopic" type="text" value="general" placeholder="e.g. general, alerts" />
-                    </div>
-                </div>
-                <button class="btn btn-register" id="regBtn" onclick="registerDevice()">
-                    <span>📲</span> Register Device
-                </button>
-                <div id="regStatus" style="margin-top:12px;font-size:0.82rem;"></div>
-            </div>
-
-            <!-- SEND NOTIFICATION -->
-            <div class="card">
-                <div class="section-title"><span>🚀</span> Send Notification</div>
-                <label class="form-label">Title</label>
-                <input id="notifTitle" type="text" placeholder="Enter notification title" />
-                <label class="form-label">Message</label>
-                <textarea id="notifMessage" placeholder="Your notification message here..."></textarea>
-                
-                <label class="form-label">Delivery Target</label>
-                <div style="display:flex;gap:16px;margin-bottom:12px;flex-wrap:wrap;">
-                    <label style="display:flex;align-items:center;gap:6px;font-size:0.78rem;cursor:pointer;">
-                        <input type="radio" name="sendMode" value="all" checked onchange="onSendModeChange(this.value)" style="width:auto;margin:0;" /> 📢 All Broadcast
-                    </label>
-                    <label style="display:flex;align-items:center;gap:6px;font-size:0.78rem;cursor:pointer;">
-                        <input type="radio" name="sendMode" value="topic" onchange="onSendModeChange(this.value)" style="width:auto;margin:0;" /> 🏷️ By Topic
-                    </label>
-                    <label style="display:flex;align-items:center;gap:6px;font-size:0.78rem;cursor:pointer;">
-                        <input type="radio" name="sendMode" value="custom" onchange="onSendModeChange(this.value)" style="width:auto;margin:0;" /> 🔘 Custom Devices
-                    </label>
-                </div>
-
-                <div id="topicInputWrapper" style="display:none;margin-bottom:14px;">
-                    <label class="form-label">Channel Topic</label>
-                    <input id="notifTopic" type="text" placeholder="e.g. general, alerts, ops" value="general" style="margin-bottom:0;" />
-                </div>
-
-                <div id="deviceCheckListWrapper" style="display:none;">
-                    <label class="form-label">Target Devices</label>
-                    <div class="device-check-list" id="deviceCheckList">
-                        <div class="device-check-item all-item">
-                            <input type="checkbox" id="chk-all" checked onchange="toggleAll(this)" />
-                            <label for="chk-all">📢 Select All</label>
-                        </div>
-                    </div>
-                </div>
-
-                <button class="btn btn-send" id="sendBtn" onclick="sendNotification()">
-                    <span>🚀</span> Send Notification
-                </button>
-                <div id="sendStatus" style="margin-top:12px;font-size:0.82rem;"></div>
-            </div>
-
-            <!-- DEVICE LIST -->
-            <div class="card">
-                <div class="section-title">
-                    <span>💻</span> Registered Devices
-                    <button onclick="loadDevices()">↻ Refresh</button>
-                </div>
-                <div class="device-list" id="deviceList">
-                    <div class="empty">
-                        <div class="empty-icon">⏳</div>
-                        <p>Loading...</p>
-                    </div>
-                </div>
-            </div>
-
+    <!-- ══════════ OVERVIEW ══════════ -->
+    <section class="view" id="view-overview">
+      <div class="body">
+        <div class="page-head">
+          <div>
+            <h1>Overview</h1>
+            <p id="overviewSub">host loading... · durable queue · real-time SSE stream</p>
+          </div>
+          <div class="right">
+            <a href="/docs" target="_blank" class="btn sm">Swagger Docs</a>
+            <a href="/metrics" target="_blank" class="btn sm">Metrics</a>
+          </div>
         </div>
 
-        <!-- RIGHT COLUMN -->
-        <div style="display:flex;flex-direction:column;gap:20px;">
-
-            <!-- QUEUED JOBS -->
-            <div class="card">
-                <div class="section-title">
-                    <span>⏳</span> Queued Jobs
-                    <button onclick="loadQueue()">↻ Refresh</button>
-                </div>
-                <div class="history-list" id="queueList">
-                    <div class="empty">
-                        <div class="empty-icon">✓</div>
-                        <p>Queue is empty</p>
-                    </div>
-                </div>
-            </div>
-
-            <!-- NOTIFICATION HISTORY -->
-            <div class="card" style="flex:1;">
-                <div class="section-title">
-                    <span>📜</span> Notification History
-                    <button onclick="loadHistory()">↻ Refresh</button>
-                </div>
-                <div style="display:flex;gap:8px;margin-bottom:14px;align-items:center;">
-                    <input type="text" id="histSearch" placeholder="🔍 Search history..." oninput="filterHistory()" style="margin-bottom:0;padding:7px 11px;font-size:0.79rem;border-radius:5px;" />
-                    <select id="histFilter" onchange="filterHistory()" style="margin-bottom:0;width:auto;min-width:115px;padding:7px 26px 7px 10px;font-size:0.78rem;border-radius:5px;">
-                        <option value="all">All Status</option>
-                        <option value="success">✅ Delivered</option>
-                        <option value="failed">❌ Partial/Failed</option>
-                    </select>
-                </div>
-                <div class="history-list" id="historyList">
-                    <div class="empty">
-                        <div class="empty-icon">📭</div>
-                        <p>No notifications sent yet.</p>
-                    </div>
-                </div>
-            </div>
-
+        <!-- KPI strip -->
+        <div class="kpis">
+          <div class="kpi">
+            <div class="lab"><span class="mark"></span>Registered Devices</div>
+            <div class="num" id="kpiDevices">0</div>
+            <div class="foot" id="kpiDevSub">active endpoints</div>
+          </div>
+          <div class="kpi">
+            <div class="lab"><span class="mark"></span>Notifications Sent</div>
+            <div class="num" id="kpiJobs">0</div>
+            <div class="foot">lifetime delivered</div>
+          </div>
+          <div class="kpi">
+            <div class="lab"><span class="mark"></span>Active Channels</div>
+            <div class="num" id="kpiTopics">1</div>
+            <div class="foot">distinct pub/sub topics</div>
+          </div>
+          <div class="kpi">
+            <div class="lab"><span class="mark"></span>Worker Threads</div>
+            <div class="num">5</div>
+            <div class="foot">thread pool concurrency</div>
+          </div>
+          <div class="kpi">
+            <div class="lab"><span class="mark"></span>System Status</div>
+            <div class="num" style="color:var(--ok)">OK</div>
+            <div class="foot">WAL SQLite mode active</div>
+          </div>
         </div>
 
-    </div>
-</div>
+        <div class="grid">
+          <!-- throughput visual -->
+          <div class="panel">
+            <div class="panel-h">
+              <h2>Delivery throughput</h2>
+              <div class="meta">events / timeline</div>
+            </div>
+            <div class="panel-b">
+              <div class="chart">
+                <div class="yaxis"><span>4k</span><span>3k</span><span>2k</span><span>1k</span><span>0</span></div>
+                <div class="plot">
+                  <svg viewBox="0 0 720 208" preserveAspectRatio="none" aria-label="Throughput chart">
+                    <g stroke="#EDEBE2" stroke-width="1">
+                      <line x1="0" y1="8" x2="720" y2="8"/>
+                      <line x1="0" y1="54" x2="720" y2="54"/>
+                      <line x1="0" y1="100" x2="720" y2="100"/>
+                      <line x1="0" y1="146" x2="720" y2="146"/>
+                      <line x1="0" y1="192" x2="720" y2="192"/>
+                    </g>
+                    <path d="M0,150 C55,143 92,96 140,101 C188,106 214,66 268,72 C322,78 350,104 402,93 C454,82 480,46 534,54 C588,62 614,74 662,62 C690,55 706,46 720,41 L720,192 L0,192 Z" fill="#15171A" fill-opacity="0.055"/>
+                    <path d="M0,150 C55,143 92,96 140,101 C188,106 214,66 268,72 C322,78 350,104 402,93 C454,82 480,46 534,54 C588,62 614,74 662,62 C690,55 706,46 720,41" fill="none" stroke="#15171A" stroke-width="1.6"/>
+                    <circle cx="534" cy="54" r="2.6" fill="#15171A"/>
+                  </svg>
+                  <div class="xaxis"><span>00:00</span><span>04:00</span><span>08:00</span><span>12:00</span><span>16:00</span><span>20:00</span><span>now</span></div>
+                </div>
+              </div>
+            </div>
+            <div class="legend">
+              <span><i class="swatch-line"></i>Dispatched</span>
+              <span style="margin-left:auto">Sub-second Latency</span>
+            </div>
+          </div>
 
-<!-- TOAST -->
-<div id="toast">
-    <div class="toast-title" id="toastTitle">Notification Sent!</div>
-    <div class="toast-body" id="toastBody"></div>
-    <div id="toastStatus" class="toast-status s-queued">QUEUED</div>
-</div>
+          <!-- workers -->
+          <div class="panel">
+            <div class="panel-h">
+              <h2>Worker pool</h2>
+              <div class="meta">5 threads</div>
+            </div>
+            <div class="panel-b flush">
+              <div class="worker">
+                <div class="id">w-01</div>
+                <div><div class="job">worker ready · idle</div><div class="bar"><b style="width:10%;background:var(--ok)"></b></div></div>
+                <div class="state"><span class="chip ok">ready</span></div>
+              </div>
+              <div class="worker">
+                <div class="id">w-02</div>
+                <div><div class="job">worker ready · idle</div><div class="bar"><b style="width:10%;background:var(--ok)"></b></div></div>
+                <div class="state"><span class="chip ok">ready</span></div>
+              </div>
+              <div class="worker">
+                <div class="id">w-03</div>
+                <div><div class="job">worker ready · idle</div><div class="bar"><b style="width:10%;background:var(--ok)"></b></div></div>
+                <div class="state"><span class="chip ok">ready</span></div>
+              </div>
+              <div class="worker">
+                <div class="id">w-04</div>
+                <div><div class="job">worker ready · idle</div><div class="bar"><b style="width:10%;background:var(--ok)"></b></div></div>
+                <div class="state"><span class="chip ok">ready</span></div>
+              </div>
+              <div class="worker">
+                <div class="id">w-05</div>
+                <div><div class="job">worker ready · idle</div><div class="bar"><b style="width:10%;background:var(--ok)"></b></div></div>
+                <div class="state"><span class="chip ok">ready</span></div>
+              </div>
+            </div>
+            <div class="foot-note"><span>Thread-safe queue · auto-recovery</span><span>pool capacity 100%</span></div>
+          </div>
 
-<script>
-    const API = window.location.origin;
-    const typeIcon = { web: '🌐', mobile: '📱', pager: '📟' };
-
-    function esc(s) {
-        return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-    }
-
-    function toggleDetails(card) {
-        const panel = card.querySelector('.detail-panel');
-        if (!panel) return;
-        const isHidden = panel.style.display === 'none';
-        panel.style.display = isHidden ? 'block' : 'none';
-        card.classList.toggle('open', isHidden);
-    }
-
-    function toggleAll(el) {
-        if (el.checked) {
-            document.querySelectorAll('.device-chk').forEach(c => { c.checked = false; });
-        }
-    }
-
-    function onDeviceCheckChange(chk) {
-        if (chk.checked) {
-            document.getElementById('chk-all').checked = false;
-        }
-        const any = [...document.querySelectorAll('.device-chk')].some(c => c.checked);
-        if (!any) document.getElementById('chk-all').checked = true;
-    }
-
-    function getSelectedDeviceIds() {
-        if (document.getElementById('chk-all').checked) return [];
-        return [...document.querySelectorAll('.device-chk:checked')].map(c => c.value);
-    }
-
-    function getAuthHeaders(extraHeaders = {}) {
-        const key = localStorage.getItem('producer_api_key') || 'dev-secret-key-change-in-prod';
-        const headers = { ...extraHeaders };
-        if (key) headers['X-API-Key'] = key;
-        return headers;
-    }
-
-    let lastDeviceJson = "";
-    let lastHistoryJson = "";
-    let lastQueueJson = "";
-
-    // ── Get Network IP ──
-    async function loadIp() {
-        try {
-            const r = await fetch(`${API}/api`);
-            const data = await r.json();
-            if (data.network_ip) {
-                document.getElementById('netIp').textContent = `http://${data.network_ip}:5000`;
-            } else {
-                document.getElementById('netIp').textContent = "localhost:5000";
-            }
-        } catch (e) { document.getElementById('netIp').textContent = "Offline"; }
-    }
-
-    // ── SEND MODE SWITCH ──
-    function onSendModeChange(mode) {
-        const topicWrapper = document.getElementById('topicInputWrapper');
-        const deviceWrapper = document.getElementById('deviceCheckListWrapper');
-        if (mode === 'topic') {
-            topicWrapper.style.display = 'block';
-            deviceWrapper.style.display = 'none';
-        } else if (mode === 'custom') {
-            topicWrapper.style.display = 'none';
-            deviceWrapper.style.display = 'block';
-        } else {
-            topicWrapper.style.display = 'none';
-            deviceWrapper.style.display = 'none';
-        }
-    }
-
-    // ── PING DEVICE ──
-    async function pingDevice(deviceId) {
-        const badge = document.getElementById(`ping-res-${deviceId}`);
-        const btn = document.getElementById(`btn-ping-${deviceId}`);
-        if (badge) {
-            badge.style.display = 'inline-block';
-            badge.className = 'latency-badge';
-            badge.textContent = '⏳ ...';
-        }
-        if (btn) btn.disabled = true;
-
-        try {
-            const res = await fetch(`${API}/devices/${deviceId}/ping`);
-            const data = await res.json();
-            if (data.status === 'online') {
-                badge.className = 'latency-badge latency-online';
-                badge.textContent = `🟢 ${data.latency_ms}ms`;
-            } else {
-                badge.className = 'latency-badge latency-offline';
-                badge.textContent = `🔴 Offline`;
-            }
-        } catch (e) {
-            if (badge) {
-                badge.className = 'latency-badge latency-offline';
-                badge.textContent = `🔴 Error`;
-            }
-        } finally {
-            if (btn) btn.disabled = false;
-        }
-    }
-
-    // ── LOAD DEVICES ──
-    async function loadDevices(isSilent = false) {
-        try {
-            const r = await fetch(`${API}/devices`);
-            const data = await r.json();
-
-            const currentJson = JSON.stringify(data.devices);
-            if (currentJson === lastDeviceJson && isSilent) return;
-            lastDeviceJson = currentJson;
-
-            document.getElementById('statDevices').textContent = data.count || 0;
-            const list = document.getElementById('deviceList');
-            const checkList = document.getElementById('deviceCheckList');
-
-            checkList.querySelectorAll('.device-chk-row').forEach(el => el.remove());
-
-            if (!data.devices || data.devices.length === 0) {
-                list.innerHTML = `<div class="empty"><div class="empty-icon">📭</div>
-      <p>No devices registered yet.</p>
-      <p style="font-size:0.8rem;margin-top:6px;">
-        Run <code>python consumer.py</code> to register a consumer device.
-      </p></div>`;
-                return;
-            }
-
-            data.devices.forEach(d => {
-                const div = document.createElement('div');
-                div.className = 'device-check-item device-chk-row';
-                div.innerHTML = `
-      <input type="checkbox" class="device-chk" id="chk-${d.device_id}" value="${d.device_id}" onchange="onDeviceCheckChange(this)" />
-      <label for="chk-${d.device_id}">
-        ${typeIcon[d.device_type] || '💻'}
-        <span>${d.name}</span>
-        <span style="color:var(--muted);font-size:0.75rem;">(#${d.topic || 'general'})</span>
-      </label>`;
-                checkList.appendChild(div);
-            });
-
-            list.innerHTML = data.devices.map(d => `
-    <div class="device-item" id="dev-${d.device_id}">
-      <div class="device-left">
-        <div class="device-icon">${typeIcon[d.device_type] || '💻'}</div>
-        <div>
-          <div class="device-name">${d.name}</div>
-          <div class="device-addr">
-            ${d.address} &nbsp;|&nbsp;
-            <span class="type-badge type-${d.device_type}">${d.device_type.toUpperCase()}</span>
-            <span class="type-badge" style="background:rgba(13,148,136,0.08);color:var(--teal);">#${d.topic || 'general'}</span>
+          <!-- live jobs table -->
+          <div class="panel" style="grid-column:1/-1">
+            <div class="panel-h">
+              <h2>Live jobs</h2>
+              <div class="tools">
+                <span class="meta">real-time audit log</span>
+              </div>
+            </div>
+            <div class="panel-b flush">
+              <table>
+                <thead>
+                  <tr>
+                    <th style="width:84px">Job</th>
+                    <th style="min-width:240px">Title &amp; Message</th>
+                    <th style="width:110px">Target</th>
+                    <th style="width:118px">Result</th>
+                    <th style="width:108px">Status</th>
+                    <th class="num-r" style="width:110px">Receipts</th>
+                  </tr>
+                </thead>
+                <tbody id="liveJobsTbody">
+                  <tr>
+                    <td colspan="6" style="text-align:center;padding:24px;color:var(--muted)">Loading notifications history...</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="foot-note"><span>Streaming via SSE · auto-updates live without page refresh</span><span>GET /notifications/history</span></div>
           </div>
         </div>
       </div>
-      <div style="display:flex;align-items:center;gap:6px;">
-        <span class="latency-badge" id="ping-res-${d.device_id}" style="display:none;"></span>
-        <button class="ping-btn" id="btn-ping-${d.device_id}" onclick="pingDevice('${d.device_id}')">⚡ Ping</button>
-        <button class="del-btn" onclick="deleteDevice('${d.device_id}','${d.name}')">✕</button>
+    </section>
+
+    <!-- ══════════ COMPOSE ══════════ -->
+    <section class="view" id="view-compose" hidden>
+      <div class="body">
+        <div class="page-head">
+          <div>
+            <h1>Compose</h1>
+            <p>POST /notifications/send · idempotent by key · queued, never sent inline</p>
+          </div>
+          <div class="right">
+            <span class="chip ok"><i></i>dispatcher ready</span>
+          </div>
+        </div>
+
+        <div class="grid split">
+          <div class="panel">
+            <div class="panel-h"><h2>New notification</h2><div class="meta">dispatch</div></div>
+            <div class="panel-b">
+              <div class="field">
+                <label for="c-title">Title</label>
+                <input id="c-title" type="text" placeholder="e.g. Transaction Approved" oninput="updateLivePreview()">
+              </div>
+              <div class="field">
+                <label for="c-msg">Message</label>
+                <textarea id="c-msg" rows="4" placeholder="Enter alert message details..." oninput="updateLivePreview()"></textarea>
+              </div>
+              <div class="field">
+                <label>Delivery target</label>
+                <div class="target" role="group" aria-label="Delivery target">
+                  <button type="button" id="tgt-broadcast" aria-pressed="true" onclick="setTargetMode('broadcast')">Broadcast</button>
+                  <button type="button" id="tgt-topic" aria-pressed="false" onclick="setTargetMode('topic')">Topic</button>
+                  <button type="button" id="tgt-devices" aria-pressed="false" onclick="setTargetMode('devices')">Devices</button>
+                </div>
+              </div>
+              <div class="field" id="topicField" style="display:none">
+                <label for="c-topic">Channel Topic</label>
+                <input id="c-topic" type="text" value="general" oninput="updateLivePreview()">
+                <div class="hint">Dispatches only to devices subscribed to this channel.</div>
+              </div>
+              <div class="field" id="devicesField" style="display:none">
+                <label>Select Target Devices</label>
+                <div class="devpick" id="composeDevPick">
+                  <div style="padding:10px;color:var(--muted);font-size:12px;">Loading devices...</div>
+                </div>
+              </div>
+              <div class="row2">
+                <div class="field">
+                  <label for="c-sched">Delay (seconds)</label>
+                  <input id="c-sched" type="number" placeholder="0 (immediate)" min="0" oninput="updateLivePreview()">
+                  <div class="hint">0 = enqueue immediately.</div>
+                </div>
+                <div class="field">
+                  <label for="c-idem">Idempotency Key</label>
+                  <input id="c-idem" type="text" placeholder="auto-generated or custom" oninput="updateLivePreview()">
+                  <div class="hint">Prevents duplicate dispatches on network retry.</div>
+                </div>
+              </div>
+              <div class="form-foot">
+                <button type="button" class="btn primary" id="sendBtn" onclick="dispatchNotification()">Send notification</button>
+                <span id="sendOutcome" style="font-family:var(--mono);font-size:11px;color:var(--muted);"></span>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <div class="panel">
+              <div class="panel-h"><h2>Device preview</h2><div class="meta">webpush toast</div></div>
+              <div class="panel-b">
+                <div class="pushcard">
+                  <div class="top">
+                    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M3 6a5 5 0 0 1 10 0v4l1.5 2h-13L3 10z"/><path d="M6.5 13.5a1.6 1.6 0 0 0 3 0"/></svg>
+                    relay · now
+                  </div>
+                  <h3 id="prevTitle">Transaction Approved</h3>
+                  <p id="prevMsg">Your order was processed successfully.</p>
+                </div>
+                <div style="margin-top:14px">
+                  <div class="kv"><span>Target mode</span><b id="prevTarget">All Broadcast</b></div>
+                  <div class="kv"><span>Estimated latency</span><b>&lt; 50 ms</b></div>
+                  <div class="kv"><span>Worker pool</span><b>5 threads active</b></div>
+                  <div class="kv"><span>Delivery ACK</span><b>Enabled</b></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="panel" style="margin-top:16px">
+              <div class="panel-h"><h2>Request payload preview</h2><div class="meta">json</div></div>
+              <div class="panel-b">
+                <pre class="json" id="payloadPreview">{}</pre>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
-    </div>`).join('');
-        } catch (e) {
-            if (!isSilent) {
-                document.getElementById('deviceList').innerHTML =
-                    '<div class="empty"><div class="empty-icon">⚠️</div><p>Cannot reach Producer API.<br>Is producer.py running?</p></div>';
-            }
-        }
-    }
+    </section>
 
-    // ── DELETE DEVICE ──
-    async function deleteDevice(id, name) {
-        if (!confirm(`Remove device "${name}"?`)) return;
-        try {
-            const r = await fetch(`${API}/devices/${id}`, { method: 'DELETE', headers: getAuthHeaders() });
-            if ((await r.json()).success) { loadDevices(); }
-        } catch (e) { alert('Error removing device.'); }
-    }
+    <!-- ══════════ DEVICES ══════════ -->
+    <section class="view" id="view-devices" hidden>
+      <div class="body">
+        <div class="page-head">
+          <div>
+            <h1>Registered Devices</h1>
+            <p id="devicesSub">Manage consumer endpoints, monitor latency, and test live reachability</p>
+          </div>
+          <div class="right">
+            <button class="btn primary" onclick="showRegisterModal()">+ Register device</button>
+          </div>
+        </div>
 
-    // ── SEND NOTIFICATION ──
-    async function sendNotification() {
-        const title = document.getElementById('notifTitle').value.trim();
-        const message = document.getElementById('notifMessage').value.trim();
-        const sendMode = document.querySelector('input[name="sendMode"]:checked')?.value || 'all';
-        const statusEl = document.getElementById('sendStatus');
-
-        if (!title) { statusEl.innerHTML = '<span style="color:var(--danger)">⚠ Title is required.</span>'; return; }
-        if (!message) { statusEl.innerHTML = '<span style="color:var(--danger)">⚠ Message is required.</span>'; return; }
-
-        const btn = document.getElementById('sendBtn');
-        btn.disabled = true; btn.innerHTML = '<span>⏳</span> Sending...';
-
-        const body = { title, message };
-        if (sendMode === 'topic') {
-            body.topic = document.getElementById('notifTopic').value.trim() || 'general';
-        } else if (sendMode === 'custom') {
-            const selected = getSelectedDeviceIds();
-            if (selected.length > 0) body.device_ids = selected;
-        }
-
-        try {
-            const r = await fetch(`${API}/notifications/send`, {
-                method: 'POST', headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
-                body: JSON.stringify(body)
-            });
-            const data = await r.json();
-            if (data.success || r.status === 202) {
-                statusEl.innerHTML = `<span style="color:var(--success)">✅ Job queued for ${data.total_devices} device(s). Tracking...</span>`;
-                showToast(title, message, data.job_id, data.total_devices);
-                document.getElementById('notifTitle').value = '';
-                document.getElementById('notifMessage').value = '';
-                trackJob(data.job_id);
-                loadQueue();
-                setTimeout(loadHistory, 2000);
-            } else {
-                statusEl.innerHTML = `<span style="color:var(--danger)">❌ ${data.error}</span>`;
-            }
-        } catch (e) {
-            statusEl.innerHTML = '<span style="color:var(--danger)">❌ Cannot connect to Producer API.</span>';
-        }
-        btn.disabled = false; btn.innerHTML = '<span>🚀</span> Send Notification';
-    }
-
-    // ── TOAST + JOB TRACKING ──
-    function showToast(title, msg, job_id, total) {
-        document.getElementById('toastTitle').textContent = `🚀 "${title}" → ${total} device(s)`;
-        document.getElementById('toastBody').textContent = msg;
-        document.getElementById('toastStatus').textContent = 'QUEUED';
-        document.getElementById('toastStatus').className = 'toast-status s-queued';
-        document.getElementById('toast').style.display = 'block';
-        setTimeout(() => { document.getElementById('toast').style.display = 'none'; }, 7000);
-    }
-
-    async function trackJob(job_id) {
-        if (!job_id) return;
-        for (let i = 0; i < 12; i++) {
-            await new Promise(r => setTimeout(r, 600));
-            try {
-                const r = await fetch(`${API}/notifications/status/${job_id}`);
-                const data = await r.json();
-                const el = document.getElementById('toastStatus');
-                if (data.status === 'completed') {
-                    el.textContent = `✅ DONE — ${data.successful} delivered, ${data.failed} failed`;
-                    el.className = 'toast-status s-completed';
-                    loadHistory(); loadDevices(); loadQueue(); return;
-                } else if (data.status === 'processing') {
-                    el.textContent = '⚙ PROCESSING...';
-                    el.className = 'toast-status s-processing';
-                }
-            } catch (e) { break; }
-        }
-    }
-
-    // ── LOAD QUEUE ──
-    async function loadQueue(isSilent = false) {
-        try {
-            const r = await fetch(`${API}/notifications/queue`);
-            const data = await r.json();
-
-            const currentJson = JSON.stringify(data.queue);
-            if (currentJson === lastQueueJson && isSilent) return;
-            lastQueueJson = currentJson;
-
-            const list = document.getElementById('queueList');
-
-            if (!data.queue || data.queue.length === 0) {
-                list.innerHTML = '<div class="empty"><div class="empty-icon">✓</div><p>Queue is empty</p></div>';
-                return;
-            }
-
-            const dateOptions = { weekday: 'short', hour: 'numeric', minute: 'numeric', second: 'numeric', hour12: true };
-
-            list.innerHTML = data.queue.map(q => {
-                const timeStr = q.enqueued_at ? new Intl.DateTimeFormat('en-US', dateOptions).format(new Date(q.enqueued_at + 'Z')) : '—';
-                const icon = q.status === 'processing' ? '⚙' : '⏳';
-                const style = q.status === 'processing' ? 'color:var(--warn);' : 'color:var(--blue);';
-
-                return `
-    <div class="history-item">
-      <div class="history-title" style="${style}">${icon} ${q.title}</div>
-      <div class="history-meta" style="margin-top: 4px;">
-        <span class="hm-time">Waiting to send to ${q.total_devices} devices</span>
-        <span class="hm-time">${timeStr}</span>
+        <div class="panel">
+          <div class="filter-row">
+            <button class="fchip" id="filter-all" aria-pressed="true" onclick="filterDeviceTable('all')">All</button>
+            <button class="fchip" id="filter-web" aria-pressed="false" onclick="filterDeviceTable('web')">Web</button>
+            <button class="fchip" id="filter-mobile" aria-pressed="false" onclick="filterDeviceTable('mobile')">Mobile</button>
+            <button class="fchip" id="filter-pager" aria-pressed="false" onclick="filterDeviceTable('pager')">Pager</button>
+            <div class="grow" style="flex:1"></div>
+            <div class="search" style="min-width:200px">
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5 14 14"/></svg>
+              <input id="devSearchInput" placeholder="filter by name or channel" aria-label="Filter devices" oninput="filterDeviceTableText(this.value)">
+            </div>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>Device</th>
+                <th style="width:90px">Type</th>
+                <th style="width:110px">Channel</th>
+                <th style="width:190px">Endpoint</th>
+                <th style="width:110px">Push</th>
+                <th style="width:130px">Registered</th>
+                <th class="num-r" style="width:170px">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="devicesTableBody">
+              <tr>
+                <td colspan="7" style="text-align:center;padding:24px;color:var(--muted)">Loading devices fleet...</td>
+              </tr>
+            </tbody>
+          </table>
+          <div class="foot-note"><span>Ping tests round-trip latency to GET /status</span><span>Persistent SQLite WAL</span></div>
+        </div>
       </div>
-    </div>`;
-            }).join('');
-        } catch (e) {
-            if (!isSilent) {
-                document.getElementById('queueList').innerHTML =
-                    '<div class="empty"><div class="empty-icon">⚠️</div><p>Could not load queue.</p></div>';
-            }
+    </section>
+
+  </div>
+</div>
+
+<script>
+  let currentTargetMode = 'broadcast';
+  let cachedDevices = [];
+  let cachedNotifications = [];
+
+  const titles = {overview:'overview', compose:'compose', devices:'devices'};
+
+  function show(view){
+    document.querySelectorAll('.view').forEach(v => { v.hidden = v.id !== 'view-' + view; });
+    document.querySelectorAll('.rail .navitem[data-nav]').forEach(n => {
+      n.classList.toggle('active', n.dataset.nav === view);
+    });
+    document.getElementById('crumbNow').textContent = titles[view] || view;
+    window.scrollTo({top:0});
+  }
+
+  document.querySelectorAll('[data-nav]').forEach(el => {
+    el.addEventListener('click', e => {
+      const v = el.dataset.nav;
+      if (!v) return;
+      e.preventDefault();
+      show(v);
+    });
+  });
+
+  function setTargetMode(mode) {
+    currentTargetMode = mode;
+    ['broadcast', 'topic', 'devices'].forEach(m => {
+      const btn = document.getElementById('tgt-' + m);
+      if (btn) btn.setAttribute('aria-pressed', m === mode ? 'true' : 'false');
+    });
+    document.getElementById('topicField').style.display = mode === 'topic' ? 'block' : 'none';
+    document.getElementById('devicesField').style.display = mode === 'devices' ? 'block' : 'none';
+    updateLivePreview();
+  }
+
+  function updateLivePreview() {
+    const title = document.getElementById('c-title').value.trim() || 'Notification Title';
+    const msg = document.getElementById('c-msg').value.trim() || 'Alert message content will appear here.';
+    document.getElementById('prevTitle').textContent = title;
+    document.getElementById('prevMsg').textContent = msg;
+
+    let targetDesc = 'All Broadcast';
+    if (currentTargetMode === 'topic') {
+      targetDesc = '#' + (document.getElementById('c-topic').value.trim() || 'general');
+    } else if (currentTargetMode === 'devices') {
+      const checked = document.querySelectorAll('#composeDevPick input[type=checkbox]:checked');
+      targetDesc = checked.length + ' selected device(s)';
+    }
+    document.getElementById('prevTarget').textContent = targetDesc;
+
+    const payload = {
+      title: title,
+      message: msg,
+    };
+    if (currentTargetMode === 'topic') payload.topic = document.getElementById('c-topic').value.trim() || 'general';
+    if (currentTargetMode === 'devices') {
+      payload.device_ids = Array.from(document.querySelectorAll('#composeDevPick input[type=checkbox]:checked')).map(cb => cb.value);
+    }
+    const sched = parseInt(document.getElementById('c-sched').value, 10);
+    if (sched > 0) payload.delay_seconds = sched;
+    const idem = document.getElementById('c-idem').value.trim();
+    if (idem) payload.idempotency_key = idem;
+
+    document.getElementById('payloadPreview').textContent = JSON.stringify(payload, null, 2);
+  }
+
+  // Fetch initial data
+  async function loadInitialData() {
+    try {
+      const devRes = await fetch('/devices');
+      const devData = await devRes.json();
+      if (devData.success) {
+        cachedDevices = devData.devices || [];
+        renderDevices(cachedDevices);
+        renderComposeDevices(cachedDevices);
+      }
+
+      const notifRes = await fetch('/notifications/history');
+      const notifData = await notifRes.json();
+      if (notifData.success) {
+        cachedNotifications = notifData.notifications || [];
+        renderLiveJobs(cachedNotifications);
+      }
+
+      const topRes = await fetch('/topics');
+      const topData = await topRes.json();
+      if (topData.success && topData.topics) {
+        document.getElementById('kpiTopics').textContent = topData.topics.length || 1;
+      }
+
+      const hostIp = window.location.host;
+      document.getElementById('overviewSub').textContent = hostIp + ' · durable queue · real-time SSE stream';
+    } catch(err) {
+      console.error('Data load error:', err);
+    }
+  }
+
+  function renderDevices(devices) {
+    document.getElementById('kpiDevices').textContent = devices.length;
+    document.getElementById('railDevCount').textContent = devices.length;
+    const tbody = document.getElementById('devicesTableBody');
+
+    if (!devices.length) {
+      tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--muted)">No devices registered. Click "Register device" above or open Consumer on port 5001.</td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = devices.map(d => `
+      <tr data-type="${esc(d.device_type)}" data-topic="${esc(d.topic || 'general')}">
+        <td><span class="title">${esc(d.name)}</span><div class="sub">${esc(d.device_id.substring(0, 10))}...</div></td>
+        <td>${esc(d.device_type)}</td>
+        <td><span class="topic">#${esc(d.topic || 'general')}</span></td>
+        <td class="mono">${esc(d.address)}</td>
+        <td><span class="chip ${d.has_subscription ? 'ok' : 'queued'}"><i></i>${d.has_subscription ? 'active' : 'token'}</span></td>
+        <td class="mono">${d.registered_at ? esc(d.registered_at.substring(0, 10)) : 'today'}</td>
+        <td class="num-r">
+          <button class="btn ghost sm" id="pingBtn-${d.device_id}" onclick="pingDevice('${d.device_id}')">Ping</button>
+          <button class="btn ghost sm" style="color:var(--bad)" onclick="removeDevice('${d.device_id}')">Remove</button>
+        </td>
+      </tr>
+    `).join('');
+  }
+
+  function renderComposeDevices(devices) {
+    const container = document.getElementById('composeDevPick');
+    if (!devices.length) {
+      container.innerHTML = '<div style="padding:10px;color:var(--muted);font-size:12px;">No registered devices found.</div>';
+      return;
+    }
+    container.innerHTML = devices.map(d => `
+      <label>
+        <input type="checkbox" value="${esc(d.device_id)}" onchange="updateLivePreview()">
+        <span>${esc(d.name)}</span>
+        <span class="meta">#${esc(d.topic || 'general')} · ${esc(d.device_type)}</span>
+      </label>
+    `).join('');
+  }
+
+  function renderLiveJobs(jobs) {
+    document.getElementById('kpiJobs').textContent = jobs.length;
+    const tbody = document.getElementById('liveJobsTbody');
+    if (!jobs.length) {
+      tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--muted)">No notifications sent yet. Use Compose to send your first alert.</td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = jobs.map(j => {
+      const jobIdShort = (j.id || '').substring(0, 8);
+      const isOk = j.status === 'completed' && j.failed === 0;
+      const isRetrying = j.status === 'retrying';
+      const isDlq = j.status === 'dlq';
+
+      let statusChip = '<span class="chip ok"><i></i>delivered</span>';
+      if (isRetrying) statusChip = '<span class="chip warn"><i></i>retrying</span>';
+      else if (isDlq) statusChip = '<span class="chip bad"><i></i>dlq</span>';
+      else if (j.status === 'scheduled') statusChip = '<span class="chip queued"><i></i>scheduled</span>';
+
+      const ackCount = (j.details || []).filter(d => d.acknowledged).length;
+      const totalDevs = j.total_devices || 1;
+      const meterWidth = Math.min(100, Math.round(((j.successful || (isOk ? totalDevs : 0)) / totalDevs) * 100));
+
+      return `
+        <tr>
+          <td class="mono">${esc(jobIdShort)}</td>
+          <td><span class="title">${esc(j.title)}</span><div class="sub">${esc(j.message.substring(0, 50))}...</div></td>
+          <td><span class="topic">${esc(j.topic || 'all')}</span></td>
+          <td>
+            <div class="meter">
+              <div class="track"><b class="${isOk ? 'ok' : (isDlq ? 'bad' : '')}" style="width:${meterWidth}%"></b></div>
+              <span>${j.successful || (isOk ? totalDevs : 0)}/${totalDevs}</span>
+            </div>
+          </td>
+          <td>${statusChip}</td>
+          <td class="mono num-r">${ackCount > 0 ? `<span class="chip ok">✓ ACK (${ackCount})</span>` : '—'}</td>
+        </tr>
+      `;
+    }).join('');
+  }
+
+  async function pingDevice(deviceId) {
+    const btn = document.getElementById('pingBtn-' + deviceId);
+    if (btn) btn.textContent = '...';
+    try {
+      const res = await fetch(`/devices/${deviceId}/ping`);
+      const data = await res.json();
+      if (btn) {
+        if (data.status === 'online') {
+          btn.innerHTML = `<span style="color:var(--ok)">🟢 ${data.latency_ms}ms</span>`;
+        } else {
+          btn.innerHTML = `<span style="color:var(--bad)">🔴 offline</span>`;
         }
+        setTimeout(() => { btn.textContent = 'Ping'; }, 3500);
+      }
+    } catch(e) {
+      if (btn) btn.textContent = 'Error';
+    }
+  }
+
+  async function removeDevice(deviceId) {
+    if (!confirm('Unregister this device?')) return;
+    try {
+      const res = await fetch(`/devices/${deviceId}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (data.success) {
+        cachedDevices = cachedDevices.filter(d => d.device_id !== deviceId);
+        renderDevices(cachedDevices);
+        renderComposeDevices(cachedDevices);
+      } else {
+        alert(data.error || 'Failed to remove device');
+      }
+    } catch(e) {
+      alert('Network error removing device');
+    }
+  }
+
+  async function dispatchNotification() {
+    const title = document.getElementById('c-title').value.trim();
+    const msg = document.getElementById('c-msg').value.trim();
+    const outcome = document.getElementById('sendOutcome');
+    const sendBtn = document.getElementById('sendBtn');
+
+    if (!title || !msg) {
+      outcome.textContent = 'Error: Title and Message are required.';
+      outcome.style.color = 'var(--bad)';
+      return;
     }
 
-    // ── LOAD HISTORY ──
-    let allHistory = [];
+    const payload = { title: title, message: msg };
+    if (currentTargetMode === 'topic') {
+      payload.topic = document.getElementById('c-topic').value.trim() || 'general';
+    } else if (currentTargetMode === 'devices') {
+      const checked = Array.from(document.querySelectorAll('#composeDevPick input[type=checkbox]:checked')).map(cb => cb.value);
+      if (!checked.length) {
+        outcome.textContent = 'Error: Select at least one device.';
+        outcome.style.color = 'var(--bad)';
+        return;
+      }
+      payload.device_ids = checked;
+    }
 
-    function renderHistoryList(items) {
-        const list = document.getElementById('historyList');
-        if (!items || items.length === 0) {
-            list.innerHTML = '<div class="empty"><div class="empty-icon">📭</div><p>No matching notifications.</p></div>';
-            return;
+    const sched = parseInt(document.getElementById('c-sched').value, 10);
+    if (sched > 0) payload.delay_seconds = sched;
+    const idem = document.getElementById('c-idem').value.trim();
+
+    const headers = { 'Content-Type': 'application/json' };
+    if (idem) headers['Idempotency-Key'] = idem;
+
+    sendBtn.disabled = true;
+    outcome.textContent = 'Enqueuing...';
+    outcome.style.color = 'var(--muted)';
+
+    try {
+      const res = await fetch('/notifications/send', {
+        method: 'POST',
+        headers: headers,
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      sendBtn.disabled = false;
+      if (data.success) {
+        outcome.textContent = `Enqueued job ${data.job_id.substring(0, 8)} (${data.status})`;
+        outcome.style.color = 'var(--ok)';
+        document.getElementById('c-title').value = '';
+        document.getElementById('c-msg').value = '';
+        updateLivePreview();
+        setTimeout(() => { show('overview'); }, 1200);
+      } else {
+        outcome.textContent = data.error || 'Dispatch rejected';
+        outcome.style.color = 'var(--bad)';
+      }
+    } catch(err) {
+      sendBtn.disabled = false;
+      outcome.textContent = 'Network error sending notification';
+      outcome.style.color = 'var(--bad)';
+    }
+  }
+
+  function showRegisterModal() {
+    const name = prompt('Enter device name:', 'Dev Workstation');
+    if (!name) return;
+    const topic = prompt('Enter channel topic:', 'alerts') || 'general';
+    const portStr = prompt('Enter port:', '5001') || '5001';
+
+    fetch('/devices/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: name,
+        device_type: 'web',
+        ip_address: '127.0.0.1',
+        port: parseInt(portStr, 10),
+        topic: topic
+      })
+    })
+    .then(r => r.json())
+    .then(data => {
+      if (data.success) {
+        loadInitialData();
+      } else {
+        alert(data.error || 'Registration failed');
+      }
+    })
+    .catch(() => alert('Registration request failed'));
+  }
+
+  function filterDeviceTable(type) {
+    ['all', 'web', 'mobile', 'pager'].forEach(t => {
+      const btn = document.getElementById('filter-' + t);
+      if (btn) btn.setAttribute('aria-pressed', t === type ? 'true' : 'false');
+    });
+    const rows = document.querySelectorAll('#devicesTableBody tr');
+    rows.forEach(r => {
+      if (!r.dataset.type) return;
+      r.style.display = (type === 'all' || r.dataset.type === type) ? '' : 'none';
+    });
+  }
+
+  function filterDeviceTableText(txt) {
+    const q = txt.toLowerCase();
+    const rows = document.querySelectorAll('#devicesTableBody tr');
+    rows.forEach(r => {
+      if (!r.dataset.type) return;
+      const text = r.textContent.toLowerCase();
+      r.style.display = text.includes(q) ? '' : 'none';
+    });
+  }
+
+  function applyFilter(val) {
+    const q = val.toLowerCase();
+    const jobRows = document.querySelectorAll('#liveJobsTbody tr');
+    jobRows.forEach(r => {
+      r.style.display = r.textContent.toLowerCase().includes(q) ? '' : 'none';
+    });
+  }
+
+  function connectSSE() {
+    const evt = new EventSource('/events');
+    const chip = document.getElementById('mainSseChip');
+    evt.onopen = () => {
+      chip.className = 'chip ok live';
+      chip.innerHTML = '<i></i>SSE live';
+    };
+    evt.onmessage = (e) => {
+      try {
+        const payload = JSON.parse(e.data);
+        if (payload.type === 'device_change') {
+          loadInitialData();
+        } else if (payload.type === 'job_queued' || payload.type === 'job_complete' || payload.type === 'job_ack') {
+          loadInitialData();
         }
+      } catch(err){}
+    };
+    evt.onerror = () => {
+      chip.className = 'chip warn';
+      chip.innerHTML = '<i></i>reconnecting';
+    };
+  }
 
-        const dateOptions = { weekday: 'short', hour: 'numeric', minute: 'numeric', hour12: true };
+  function esc(s) {
+    return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
 
-        list.innerHTML = items.map(n => {
-            const cls = n.failed === 0 ? 'success' : n.successful > 0 ? 'partial' : '';
-            const timeStr = n.enqueued_at ? new Intl.DateTimeFormat('en-US', dateOptions).format(new Date(n.enqueued_at + 'Z')) : '—';
-
-            let detailsHtml = '';
-            if (n.details && n.details.length > 0) {
-                const rows = n.details.map(d => {
-                    const icon = d.status === 'success' ? '✅' : '❌';
-                    const color = d.status === 'success' ? 'var(--success)' : 'var(--danger)';
-                    const reason = d.message || 'Unknown';
-                    const ackBadge = d.acknowledged
-                        ? `<span style="background:rgba(5,150,105,0.09);color:var(--success);border:1px solid rgba(5,150,105,0.22);padding:2px 6px;border-radius:4px;font-size:0.62rem;font-weight:700;margin-left:6px;">✓ ACKNOWLEDGED</span>`
-                        : '';
-
-                    return `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);font-size:0.74rem;">
-                        <span>${icon}</span>
-                        <span style="font-weight:600;min-width:120px;">${esc(d.device_name || 'Unknown')}</span>
-                        <span class="type-badge type-${d.device_type || 'web'}" style="font-size:0.58rem;">${(d.device_type || 'web').toUpperCase()}</span>
-                        ${ackBadge}
-                        <span style="color:${color};margin-left:auto;text-align:right;max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${esc(reason)}">${esc(reason)}</span>
-                    </div>`;
-                }).join('');
-                detailsHtml = `<div class="detail-panel" style="display:none;margin-top:10px;padding:8px 10px;background:var(--surface);border:1px solid var(--border);border-radius:6px;">
-                    <div style="font-size:0.66rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px;">Delivery Details & Acknowledgements</div>
-                    ${rows}
-                </div>`;
-            }
-
-            return `
-    <div class="history-item ${cls}" style="cursor:pointer;" onclick="toggleDetails(this)">
-      <div style="display:flex;align-items:center;justify-content:space-between;">
-        <div class="history-title">${esc(n.title)}</div>
-        ${detailsHtml ? '<span class="toggle-arrow">▼</span>' : ''}
-      </div>
-      <div class="history-msg">${esc(n.message)}</div>
-      <div class="history-meta">
-        <span class="hm-chip hm-ok">✅ ${n.successful} sent</span>
-        ${n.failed > 0 ? `<span class="hm-chip hm-fail">❌ ${n.failed} failed</span>` : ''}
-        <span class="hm-chip hm-queue">${n.status.toUpperCase()}</span>
-        <span class="hm-time">${timeStr}</span>
-      </div>
-      ${detailsHtml}
-    </div>`;
-        }).join('');
-    }
-
-    function filterHistory() {
-        const q = (document.getElementById('histSearch').value || '').trim().toLowerCase();
-        const f = document.getElementById('histFilter').value;
-
-        const filtered = allHistory.filter(n => {
-            const matchesText = !q || (n.title && n.title.toLowerCase().includes(q)) || (n.message && n.message.toLowerCase().includes(q));
-            if (!matchesText) return false;
-
-            if (f === 'success') return n.failed === 0 && n.successful > 0;
-            if (f === 'failed') return n.failed > 0;
-            return true;
-        });
-
-        renderHistoryList(filtered);
-    }
-
-    async function loadHistory(isSilent = false) {
-        try {
-            const r = await fetch(`${API}/notifications/history`);
-            const data = await r.json();
-
-            const currentJson = JSON.stringify(data.notifications);
-            if (currentJson === lastHistoryJson && isSilent) return;
-            lastHistoryJson = currentJson;
-
-            allHistory = data.notifications || [];
-            document.getElementById('statJobs').textContent = data.count || 0;
-            filterHistory();
-        } catch (e) {
-            if (!isSilent) {
-                document.getElementById('historyList').innerHTML =
-                    '<div class="empty"><div class="empty-icon">⚠️</div><p>Could not load history.</p></div>';
-            }
-        }
-    }
-
-    // ── REGISTER DEVICE ──
-    async function registerDevice() {
-        const name = document.getElementById('regName').value.trim();
-        const type = document.getElementById('regType').value;
-        const ip = document.getElementById('regIp').value.trim();
-        const port = document.getElementById('regPort').value;
-        const topic = (document.getElementById('regTopic').value || 'general').trim();
-        const statusEl = document.getElementById('regStatus');
-
-        if (!name) { statusEl.innerHTML = '<span style="color:var(--danger)">⚠ Device name is required.</span>'; return; }
-
-        const btn = document.getElementById('regBtn');
-        btn.disabled = true; btn.innerHTML = '<span>⏳</span> Registering...';
-
-        try {
-            const r = await fetch(`${API}/devices/register`, {
-                method: 'POST', headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
-                body: JSON.stringify({ name, device_type: type, ip_address: ip, port: parseInt(port), topic })
-            });
-            const data = await r.json();
-            if (data.success) {
-                statusEl.innerHTML = `<span style="color:var(--success)">✅ Registered: ${data.device.name} (#${data.device.topic || topic})</span>`;
-                document.getElementById('regName').value = '';
-                loadDevices();
-            } else {
-                statusEl.innerHTML = `<span style="color:var(--danger)">❌ ${data.error}</span>`;
-            }
-        } catch (e) {
-            statusEl.innerHTML = '<span style="color:var(--danger)">❌ Cannot connect to Producer API.</span>';
-        }
-        btn.disabled = false; btn.innerHTML = '<span>📲</span> Register Device';
-    }
-
-    // ── SSE (Real-Time Updates) ──
-    function connectSSE() {
-        const evtSource = new EventSource('/events');
-        evtSource.onmessage = (event) => {
-            loadDevices(true);
-            loadHistory(true);
-            loadQueue(true);
-        };
-        evtSource.onerror = () => {
-            console.warn('[SSE] Lost connection to Producer. Retrying...');
-        };
-    }
-
-    // ── INIT ──
-    loadIp();
-    loadDevices();
-    loadQueue();
-    loadHistory();
+  window.addEventListener('load', () => {
+    updateLivePreview();
+    loadInitialData();
     connectSSE();
+  });
 </script>
 </body>
-
 </html>
