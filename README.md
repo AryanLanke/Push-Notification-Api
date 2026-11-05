@@ -1,6 +1,24 @@
-# 🔔 Push Notification API — Producer-Consumer System
+# 🔔 Push Notification Delivery API — Distributed Microservice Engine
 
-> A Flask-based distributed notification delivery system built on a Producer-Consumer architecture. Supports web, mobile, and pager device types with real-time SSE updates, a background worker pool, and SQLite persistence.
+[![CI Pipeline](https://github.com/AryanLanke/Push-Notification-Api/actions/workflows/ci.yml/badge.svg)](https://github.com/AryanLanke/Push-Notification-Api/actions/workflows/ci.yml)
+[![OpenAPI 3.0](https://img.shields.io/badge/OpenAPI-3.0.3-green.svg)](http://localhost:5000/docs)
+[![Prometheus](https://img.shields.io/badge/Metrics-Prometheus-orange.svg)](http://localhost:5000/metrics)
+[![Python 3.10 | 3.11](https://img.shields.io/badge/Python-3.10%20%7C%203.11-blue.svg)](https://www.python.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
+> A production-grade, distributed push notification delivery microservice built in Python (Flask/Gunicorn). Features a durable fallback queue, worker thread pool, WebPush (VAPID) / HTTP / Pager protocols, topic pub/sub routing, delivery receipts (ACKs), sliding-window rate limiting, exponential backoff with Dead-Letter Queue (DLQ), idempotency caching, and Prometheus observability.
+
+---
+
+## ⚡ Highlights & Key Capabilities
+
+- **Interactive API Documentation**: Full OpenAPI 3.0 specification rendered via Swagger UI at `/docs`.
+- **Durable Queue Architecture**: Redis-backed FIFO queue with zero-dependency thread-safe in-memory fallback.
+- **Idempotency Protection**: `Idempotency-Key` header prevents duplicate notifications during network retries.
+- **Resilience Engineering**: Exponential backoff retry with jitter, Dead-Letter Queue (DLQ), and replay APIs.
+- **Topic / Channel Pub/Sub**: Target notifications by channel (`#devops`, `#alerts`, `#billing`) or specific device IDs.
+- **Observability**: Live Prometheus metrics endpoint at `/metrics` exporting queue depth, worker states, and throughput counters.
+- **Live SSE Streaming**: Unidirectional Server-Sent Events dashboard updates with sub-millisecond reaction times.
 
 ---
 

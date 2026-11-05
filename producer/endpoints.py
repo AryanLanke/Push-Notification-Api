@@ -130,6 +130,48 @@ def rate_limit(max_requests=60, window_seconds=60):
     return decorator
 
 
+# ============================================================================
+# IDEMPOTENCY KEY CACHE
+# ============================================================================
+_idempotency_lock = threading.Lock()
+_idempotency_cache = {}  # {key: (timestamp, response_dict, status_code)}
+
+
+def get_cached_idempotency(key):
+    """Retrieve unexpired cached response for an Idempotency-Key (valid for 24h)."""
+    with _idempotency_lock:
+        if key in _idempotency_cache:
+            ts, resp_data, status_code = _idempotency_cache[key]
+            if time.time() - ts < 86400:  # 24 hours
+                return resp_data, status_code
+            else:
+                del _idempotency_cache[key]
+        return None
+
+
+def set_cached_idempotency(key, resp_data, status_code):
+    """Save response in cache under the Idempotency-Key."""
+    with _idempotency_lock:
+        _idempotency_cache[key] = (time.time(), resp_data, status_code)
+
+
+# ============================================================================
+# METRICS TRACKING (Prometheus Exposition Format)
+# ============================================================================
+_metrics_lock = threading.Lock()
+_metrics_counters = defaultdict(int)
+
+
+def record_metric(name, value=1, labels=None):
+    """Record increment to internal metric counter."""
+    key = name
+    if labels:
+        label_str = ",".join(f'{k}="{v}"' for k, v in sorted(labels.items()))
+        key = f"{name}{{{label_str}}}"
+    with _metrics_lock:
+        _metrics_counters[key] += value
+
+
 def is_ssrf_target(host):
     """Detect cloud metadata and prohibited SSRF targets."""
     prohibited = {"169.254.169.254", "metadata.google.internal", "instance-data"}
@@ -145,6 +187,182 @@ def is_ssrf_target(host):
 def admin_dashboard():
     """Serve the Producer admin dashboard."""
     return render_template("producer.html")
+
+
+@api.route("/docs", methods=["GET"])
+def api_documentation():
+    """Serve interactive Swagger UI documentation."""
+    return render_template("docs.html")
+
+
+@api.route("/openapi.json", methods=["GET"])
+def openapi_spec():
+    """Return OpenAPI 3.0 specification for Swagger UI and automated tooling."""
+    spec = {
+        "openapi": "3.0.3",
+        "info": {
+            "title": "Push Notification Delivery API",
+            "version": "2.1.0",
+            "description": "High-throughput, resilient notification dispatch engine with durable queueing, multi-worker pool, WebPush/HTTP/Pager protocols, topic pub/sub, delivery ACKs, exponential backoff, Dead-Letter Queue (DLQ), and Prometheus observability.",
+            "contact": {
+                "name": "Aryan Lanke",
+                "url": "https://github.com/AryanLanke/Push-Notification-Api"
+            }
+        },
+        "servers": [
+            {"url": "/", "description": "Current Server"}
+        ],
+        "components": {
+            "securitySchemes": {
+                "ApiKeyAuth": {
+                    "type": "apiKey",
+                    "in": "header",
+                    "name": "X-API-Key"
+                }
+            }
+        },
+        "paths": {
+            "/notifications/send": {
+                "post": {
+                    "summary": "Dispatch Notification",
+                    "description": "Enqueues a notification to all devices, by topic, or specific device IDs. Supports Idempotency-Key header and delayed scheduling.",
+                    "security": [{"ApiKeyAuth": []}],
+                    "parameters": [
+                        {
+                            "name": "Idempotency-Key",
+                            "in": "header",
+                            "required": False,
+                            "schema": {"type": "string"},
+                            "description": "Unique key ensuring duplicate dispatches are ignored within 24h"
+                        }
+                    ],
+                    "requestBody": {
+                        "required": True,
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": ["title", "message"],
+                                    "properties": {
+                                        "title": {"type": "string", "example": "Server Alert"},
+                                        "message": {"type": "string", "example": "High CPU utilization detected on node-01"},
+                                        "topic": {"type": "string", "example": "devops"},
+                                        "device_ids": {"type": "array", "items": {"type": "string"}},
+                                        "delay_seconds": {"type": "integer", "example": 0}
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "responses": {
+                        "202": {"description": "Notification successfully queued or scheduled"},
+                        "400": {"description": "Invalid input"},
+                        "404": {"description": "Target devices or topic not found"},
+                        "429": {"description": "Rate limit exceeded"}
+                    }
+                }
+            },
+            "/notifications/status/{job_id}": {
+                "get": {
+                    "summary": "Check Notification Status",
+                    "parameters": [{"name": "job_id", "in": "path", "required": True, "schema": {"type": "string"}}],
+                    "responses": {"200": {"description": "Job details and status"}}
+                }
+            },
+            "/notifications/dlq": {
+                "get": {
+                    "summary": "List Dead-Letter Queue (DLQ)",
+                    "security": [{"ApiKeyAuth": []}],
+                    "responses": {"200": {"description": "Permanently failed jobs in DLQ"}}
+                }
+            },
+            "/notifications/dlq/{job_id}/replay": {
+                "post": {
+                    "summary": "Replay Dead-Letter Queue Job",
+                    "security": [{"ApiKeyAuth": []}],
+                    "parameters": [{"name": "job_id", "in": "path", "required": True, "schema": {"type": "string"}}],
+                    "responses": {"200": {"description": "Job re-enqueued for delivery"}}
+                }
+            },
+            "/devices/register": {
+                "post": {
+                    "summary": "Register Device",
+                    "requestBody": {
+                        "required": True,
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": ["name"],
+                                    "properties": {
+                                        "name": {"type": "string", "example": "Production Ops Webhook"},
+                                        "device_type": {"type": "string", "enum": ["web", "mobile", "pager"], "default": "web"},
+                                        "ip_address": {"type": "string", "default": "127.0.0.1"},
+                                        "port": {"type": "integer", "default": 5001},
+                                        "topic": {"type": "string", "default": "general"}
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "responses": {"201": {"description": "Device successfully registered"}}
+                }
+            },
+            "/topics": {
+                "get": {
+                    "summary": "List Active Topics",
+                    "responses": {"200": {"description": "Distinct topics registered across devices"}}
+                }
+            },
+            "/devices/{device_id}/ping": {
+                "get": {
+                    "summary": "Ping Device Latency",
+                    "parameters": [{"name": "device_id", "in": "path", "required": True, "schema": {"type": "string"}}],
+                    "responses": {"200": {"description": "Device online status and latency in ms"}}
+                }
+            },
+            "/health": {
+                "get": {
+                    "summary": "Health Check Probe",
+                    "responses": {"200": {"description": "Service and database healthy"}}
+                }
+            },
+            "/metrics": {
+                "get": {
+                    "summary": "Prometheus Metrics",
+                    "responses": {"200": {"description": "Prometheus exposition metrics"}}
+                }
+            }
+        }
+    }
+    return jsonify(spec), 200
+
+
+@api.route("/metrics", methods=["GET"])
+def prometheus_metrics():
+    """Export Prometheus text exposition format metrics for scraping."""
+    lines = [
+        "# HELP push_notifications_enqueued_total Total notification jobs enqueued.",
+        "# TYPE push_notifications_enqueued_total counter",
+    ]
+    with _metrics_lock:
+        for k, v in sorted(_metrics_counters.items()):
+            lines.append(f"{k} {v}")
+
+    # Add active queue depth and worker metrics
+    try:
+        from logic import notification_queue, WORKER_POOL_SIZE
+        queue_size = 0 if notification_queue.empty() else 1
+        lines.append("# HELP push_notification_queue_depth Estimated queue depth.")
+        lines.append("# TYPE push_notification_queue_depth gauge")
+        lines.append(f"push_notification_queue_depth {queue_size}")
+        lines.append("# HELP push_notification_worker_pool_size Configured worker threads.")
+        lines.append("# TYPE push_notification_worker_pool_size gauge")
+        lines.append(f"push_notification_worker_pool_size {WORKER_POOL_SIZE}")
+    except Exception:
+        pass
+
+    return Response("\n".join(lines) + "\n", mimetype="text/plain; version=0.0.4; charset=utf-8")
 
 
 @api.route("/health", methods=["GET"])
@@ -571,6 +789,16 @@ def send_notification():
             400,
         )
 
+    # Check Idempotency-Key
+    idempotency_key = request.headers.get("Idempotency-Key", "").strip()
+    if idempotency_key:
+        cached = get_cached_idempotency(idempotency_key)
+        if cached:
+            cached_resp, status_code = cached
+            resp = jsonify(cached_resp)
+            resp.headers["X-Cache-Lookup"] = "HIT-IDEMPOTENT"
+            return resp, status_code
+
     title = data.get("title", "").strip()
     message = data.get("message", "").strip()
     device_ids = data.get("device_ids", [])
@@ -711,19 +939,24 @@ def send_notification():
     target_addresses = [f"http://{d['ip_address']}:{d['port']}" for d in device_dicts]
     logger.info("Enqueued job %s (%s): '%s' to %d target(s)", job_id, initial_status, title, len(device_dicts))
 
-    return (
-        jsonify({
-            "success": True,
-            "message": f"Notification job {initial_status}",
-            "job_id": job_id,
-            "status": initial_status,
-            "scheduled_for": scheduled_for.isoformat() if scheduled_for else None,
-            "total_devices": len(device_dicts),
-            "target_addresses": target_addresses,
-            "hint": f"Track status at GET /notifications/status/{job_id}",
-        }),
-        202,
-    )
+    # Record Prometheus metrics
+    record_metric("push_notifications_enqueued_total", 1, {"status": initial_status, "topic": topic or "all"})
+
+    response_payload = {
+        "success": True,
+        "message": f"Notification job {initial_status}",
+        "job_id": job_id,
+        "status": initial_status,
+        "scheduled_for": scheduled_for.isoformat() if scheduled_for else None,
+        "total_devices": len(device_dicts),
+        "target_addresses": target_addresses,
+        "hint": f"Track status at GET /notifications/status/{job_id}",
+    }
+
+    if idempotency_key:
+        set_cached_idempotency(idempotency_key, response_payload, 202)
+
+    return jsonify(response_payload), 202
 
 
 @api.route("/notifications/status/<job_id>", methods=["GET"])

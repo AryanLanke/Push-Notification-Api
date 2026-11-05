@@ -1,0 +1,86 @@
+{
+  "info": {
+    "_postman_id": "push-notification-api-collection",
+    "name": "Push Notification API",
+    "description": "Comprehensive Postman collection for testing the Push Notification API.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "System Health",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/health",
+          "host": ["{{baseUrl}}"],
+          "path": ["health"]
+        }
+      }
+    },
+    {
+      "name": "Prometheus Metrics",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/metrics",
+          "host": ["{{baseUrl}}"],
+          "path": ["metrics"]
+        }
+      }
+    },
+    {
+      "name": "Register Consumer Device",
+      "request": {
+        "method": "POST",
+        "header": [{"key": "Content-Type", "value": "application/json"}],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Dev Webhook\",\n  \"device_type\": \"web\",\n  \"ip_address\": \"127.0.0.1\",\n  \"port\": 5001,\n  \"topic\": \"alerts\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/devices/register",
+          "host": ["{{baseUrl}}"],
+          "path": ["devices", "register"]
+        }
+      }
+    },
+    {
+      "name": "Dispatch Notification (Idempotent)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {"key": "Content-Type", "value": "application/json"},
+          {"key": "Idempotency-Key", "value": "req-{{$guid}}"},
+          {"key": "X-API-Key", "value": "{{apiKey}}"}
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"title\": \"Production Alert\",\n  \"message\": \"High database connection pool latency detected.\",\n  \"topic\": \"alerts\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/notifications/send",
+          "host": ["{{baseUrl}}"],
+          "path": ["notifications", "send"]
+        }
+      }
+    },
+    {
+      "name": "Inspect Dead-Letter Queue (DLQ)",
+      "request": {
+        "method": "GET",
+        "header": [{"key": "X-API-Key", "value": "{{apiKey}}"}],
+        "url": {
+          "raw": "{{baseUrl}}/notifications/dlq",
+          "host": ["{{baseUrl}}"],
+          "path": ["notifications", "dlq"]
+        }
+      }
+    }
+  ],
+  "variable": [
+    {"key": "baseUrl", "value": "http://127.0.0.1:5000"},
+    {"key": "apiKey", "value": "dev-api-key"}
+  ]
+}

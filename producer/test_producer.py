@@ -432,4 +432,50 @@ def test_dead_letter_queue_and_replay(client):
     assert replay_data["job_id"] == job_id
 
 
+def test_docs_and_openapi_spec(client):
+    """Test that OpenAPI JSON and interactive Swagger docs are accessible"""
+    docs_res = client.get("/docs")
+    assert docs_res.status_code == 200
+    assert b"SwaggerUIBundle" in docs_res.data
+
+    spec_res = client.get("/openapi.json")
+    assert spec_res.status_code == 200
+    spec = json.loads(spec_res.data)
+    assert spec["openapi"] == "3.0.3"
+    assert "/notifications/send" in spec["paths"]
+    assert "/metrics" in spec["paths"]
+
+
+def test_prometheus_metrics(client):
+    """Test that Prometheus text exposition metrics endpoint returns valid data"""
+    res = client.get("/metrics")
+    assert res.status_code == 200
+    assert b"push_notification_queue_depth" in res.data
+    assert b"push_notification_worker_pool_size" in res.data
+
+
+def test_idempotency_key(client):
+    """Test that repeated requests with same Idempotency-Key return cached response"""
+    client.post(
+        "/devices/register",
+        data=json.dumps({"name": "Idempotent-Device", "port": 5099}),
+        content_type="application/json",
+    )
+
+    headers = {"Idempotency-Key": "test-key-uuid-999"}
+    payload = json.dumps({"title": "Charge Alert", "message": "USD 50 debited"})
+
+    res1 = client.post("/notifications/send", data=payload, headers=headers, content_type="application/json")
+    assert res1.status_code == 202
+    data1 = json.loads(res1.data)
+    job_id1 = data1["job_id"]
+
+    res2 = client.post("/notifications/send", data=payload, headers=headers, content_type="application/json")
+    assert res2.status_code == 202
+    assert res2.headers.get("X-Cache-Lookup") == "HIT-IDEMPOTENT"
+    data2 = json.loads(res2.data)
+    assert data2["job_id"] == job_id1
+
+
+
 
