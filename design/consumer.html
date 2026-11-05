@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Relay — Device Inbox (mockup)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  /* Same direction as the console: warm paper, hairlines, burnt accent,
+     mono for anything that is data. The device view is quieter and airier
+     than the admin panel — it has one job. */
+  :root{
+    --paper:#F4F3EE;
+    --surface:#FBFAF6;
+    --surface-2:#F7F6F0;
+    --ink:#15171A;
+    --ink-2:#3D4147;
+    --muted:#767A7B;
+    --faint:#A3A6A3;
+    --line:#E2E0D6;
+    --line-soft:#EDEBE2;
+    --line-strong:#CFCCC1;
+    --accent:#BE4527;
+    --accent-dark:#A0381F;
+    --accent-soft:#F0DED6;
+    --ok:#1C6B56;
+    --warn:#9A6812;
+    --bad:#A32E24;
+    --queued:#6C7580;
+    --mono:"IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    --sans:"Archivo","Helvetica Neue",Arial,sans-serif;
+    --r:2px;
+  }
+
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{
+    font-family:var(--sans);background:var(--paper);color:var(--ink);
+    -webkit-font-smoothing:antialiased;font-size:13px;line-height:1.45;
+  }
+  a{color:inherit;text-decoration:none}
+  button{font-family:inherit;font-size:inherit;color:inherit;background:none;border:0;cursor:pointer}
+
+  .shell{max-width:1220px;margin:0 auto;padding:0 28px 56px}
+
+  /* top bar */
+  .topbar{
+    display:flex;align-items:center;gap:12px;
+    height:52px;border-bottom:1px solid var(--line);
+  }
+  .brand{display:flex;align-items:center;gap:9px}
+  .brand svg{color:var(--accent)}
+  .brand .name{font-size:14px;font-weight:600;letter-spacing:.01em}
+  .brand .slash{color:var(--line-strong);font-size:13px;margin:0 1px}
+  .brand .section{font-family:var(--mono);font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:var(--muted)}
+  .grow{flex:1}
+
+  .chip{
+    display:inline-flex;align-items:center;gap:6px;
+    font-family:var(--mono);font-size:9px;letter-spacing:.12em;text-transform:uppercase;
+    padding:4px 7px;border:1px solid var(--line);background:var(--surface);border-radius:var(--r);
+    color:var(--ink-2);white-space:nowrap;
+  }
+  .chip i{width:5px;height:5px;display:block;background:currentColor}
+  .chip.ok{color:var(--ok);border-color:#CFDDD6}
+  .chip.warn{color:var(--warn);border-color:#E3D7BC}
+  .chip.bad{color:var(--bad);border-color:#E2C8C4}
+  .chip.live i{animation:blink 2.4s ease-in-out infinite}
+  @keyframes blink{0%,100%{opacity:1}50%{opacity:.25}}
+
+  .btn{
+    display:inline-flex;align-items:center;justify-content:center;gap:7px;
+    height:31px;padding:0 13px;border-radius:var(--r);
+    font-size:12px;font-weight:500;border:1px solid var(--line-strong);
+    background:var(--surface);color:var(--ink);
+    transition:background .12s ease,border-color .12s ease;
+  }
+  .btn:hover{background:var(--surface-2);border-color:var(--ink-2)}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:#FCF8F5}
+  .btn.primary:hover{background:var(--accent-dark);border-color:var(--accent-dark)}
+  .btn.ghost{background:transparent;border-color:transparent;color:var(--ink-2);padding:0 9px}
+  .btn.ghost:hover{background:var(--surface-2);border-color:transparent}
+  .btn.sm{height:26px;padding:0 9px;font-size:11px}
+
+  /* page head */
+  .head{display:flex;align-items:flex-end;justify-content:space-between;gap:28px;padding:26px 0 18px;flex-wrap:wrap}
+  .head h1{font-size:27px;font-weight:600;letter-spacing:-.025em;line-height:1.15}
+  .head .meta{font-family:var(--mono);font-size:10.5px;color:var(--muted);margin-top:8px;letter-spacing:.02em;display:flex;flex-wrap:wrap;gap:0 10px}
+  .head .meta em{font-style:normal;color:var(--faint)}
+  .actions{display:flex;align-items:center;gap:8px}
+
+  /* stats strip */
+  .stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--line);background:var(--surface);margin-bottom:16px}
+  .stat{padding:13px 15px;border-left:1px solid var(--line);min-width:0}
+  .stat:first-child{border-left:0}
+  .stat .lab{font-family:var(--mono);font-size:8.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+  .stat .val{font-family:var(--mono);font-size:19px;font-weight:500;letter-spacing:-.02em;margin-top:7px;font-variant-numeric:tabular-nums}
+  .stat .val small{font-size:11px;color:var(--muted);font-weight:400;letter-spacing:0}
+  .stat .sub{font-family:var(--mono);font-size:9px;color:var(--faint);margin-top:5px;letter-spacing:.03em}
+
+  /* layout */
+  .layout{display:grid;grid-template-columns:minmax(0,1.62fr) minmax(0,1fr);gap:16px;align-items:start}
+  .panel{background:var(--surface);border:1px solid var(--line);min-width:0}
+  .panel-h{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 16px;border-bottom:1px solid var(--line)}
+  .panel-h h2{font-size:12.5px;font-weight:600}
+  .panel-h .meta{font-family:var(--mono);font-size:9.5px;color:var(--faint);letter-spacing:.04em}
+  .panel-b{padding:15px 16px}
+
+  /* stream */
+  .daymark{display:flex;align-items:center;gap:10px;padding:11px 16px;background:var(--surface-2);border-bottom:1px solid var(--line)}
+  .daymark span{font-family:var(--mono);font-size:8.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+  .daymark .rule{flex:1;height:1px;background:var(--line)}
+
+  .feed{list-style:none}
+  .item{display:grid;grid-template-columns:64px 22px minmax(0,1fr) auto;gap:12px;padding:15px 16px 14px;border-bottom:1px solid var(--line-soft);position:relative}
+  .item:last-child{border-bottom:0}
+  .item:hover{background:var(--surface-2)}
+  .item .time{font-family:var(--mono);font-size:9.5px;color:var(--faint);letter-spacing:.02em;padding-top:3px;text-align:right}
+  .item .ico{color:var(--line-strong);padding-top:1px}
+  .item h3{font-size:13.5px;font-weight:600;letter-spacing:-.005em;line-height:1.35}
+  .item p{font-size:12.5px;color:var(--ink-2);margin-top:4px;line-height:1.5;max-width:62ch}
+  .item .row-meta{display:flex;align-items:center;gap:8px;margin-top:8px;font-family:var(--mono);font-size:9px;letter-spacing:.06em;text-transform:uppercase;color:var(--faint)}
+  .item .kind{font-family:var(--mono);font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);border:1px solid var(--line);padding:2px 5px;border-radius:var(--r);background:var(--surface);align-self:start;margin-top:1px;white-space:nowrap}
+
+  .item.fresh{background:#FCF6F2}
+  .item.fresh::before{content:"";position:absolute;left:0;top:0;bottom:0;width:2px;background:var(--accent)}
+  .item.fresh:hover{background:#FBF2ED}
+  .item.fresh h3{color:var(--ink)}
+  .newtag{font-family:var(--mono);font-size:8px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);border:1px solid var(--accent-soft);padding:1px 4px;border-radius:var(--r)}
+
+  .feed-foot{display:flex;justify-content:space-between;gap:12px;padding:9px 16px;border-top:1px solid var(--line-soft);background:var(--surface);font-family:var(--mono);font-size:9px;letter-spacing:.06em;text-transform:uppercase;color:var(--faint)}
+
+  /* aside */
+  .aside{display:flex;flex-direction:column;gap:16px}
+  .kv{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:7px 0;border-bottom:1px solid var(--line-soft);font-size:12px}
+  .kv:last-child{border-bottom:0;padding-bottom:0}
+  .kv span{color:var(--muted)}
+  .kv b{font-family:var(--mono);font-size:10.5px;font-weight:400;color:var(--ink);text-align:right;word-break:break-all}
+  .kv b.ok{color:var(--ok)}
+
+  .keybox{font-family:var(--mono);font-size:9.5px;color:var(--ink-2);background:var(--surface-2);border:1px solid var(--line);padding:8px 9px;border-radius:var(--r);word-break:break-all;line-height:1.7;margin-top:10px}
+
+  .hint{font-family:var(--mono);font-size:9.5px;color:var(--faint);line-height:1.7;letter-spacing:.02em}
+
+  .stamp{margin-top:20px;font-family:var(--mono);font-size:8.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--faint);display:flex;justify-content:space-between;gap:16px;border-top:1px solid var(--line);padding-top:12px}
+
+  @media (max-width:1000px){
+    .layout{grid-template-columns:1fr}
+    .stats{grid-template-columns:repeat(2,1fr)}
+    .stat:nth-child(odd){border-left:0}
+    .stat:nth-child(n+3){border-top:1px solid var(--line)}
+  }
+  @media (max-width:640px){
+    .shell{padding:0 14px 40px}
+    .brand{white-space:nowrap}
+    .brand .slash,.brand .section{display:none}
+    .topbar{gap:8px}
+    .chip{font-size:8.5px;letter-spacing:.08em}
+    .head{padding:18px 0 14px;gap:14px}
+    .head h1{font-size:21px}
+    .stats{grid-template-columns:1fr}
+    .stat{border-left:0;border-top:1px solid var(--line)}
+    .stat:first-child{border-top:0}
+    .item{grid-template-columns:minmax(0,1fr) auto;gap:8px 10px;padding:13px 14px}
+    .item .time{grid-column:1/-1;text-align:left;padding:0}
+    .item .ico{display:none}
+    .item .kind{grid-row:1;grid-column:2}
+  }
+</style>
+</head>
+<body>
+
+<div class="shell">
+
+  <div class="topbar">
+    <div class="brand">
+      <svg width="17" height="17" viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path d="M3 6h11M3 11h16M3 16h8"/>
+        <circle cx="17.5" cy="6" r="1.6" fill="currentColor" stroke="none"/>
+      </svg>
+      <span class="name">relay</span>
+      <span class="slash">/</span>
+      <span class="section">device inbox</span>
+    </div>
+    <div class="grow"></div>
+    <span class="chip ok live"><i></i>SSE connected</span>
+    <span class="chip">port 5001</span>
+  </div>
+
+  <div class="head">
+    <div>
+      <h1>ops-oncall-macbook</h1>
+      <div class="meta">
+        <span>8f3a4c21-b7d0-4e2a</span><em>·</em>
+        <span>http://127.0.0.1:5001</span><em>·</em>
+        <span>#alerts</span><em>·</em>
+        <span>web</span><em>·</em>
+        <span>producer :5000</span>
+      </div>
+    </div>
+    <div class="actions">
+      <button class="btn primary">
+        <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M3 6a5 5 0 0 1 10 0v4l1.5 2h-13L3 10z"/><path d="M6.5 13.5a1.6 1.6 0 0 0 3 0"/></svg>
+        Enable web push
+      </button>
+      <button class="btn ghost">Refresh</button>
+      <button class="btn ghost">Clear view</button>
+    </div>
+  </div>
+
+  <div class="stats">
+    <div class="stat">
+      <div class="lab">Received today</div>
+      <div class="val">24</div>
+      <div class="sub">+6 since 09:00</div>
+    </div>
+    <div class="stat">
+      <div class="lab">Last event</div>
+      <div class="val">12<small>s ago</small></div>
+      <div class="sub">12:41:08 local</div>
+    </div>
+    <div class="stat">
+      <div class="lab">Push permission</div>
+      <div class="val">Granted</div>
+      <div class="sub">service worker active</div>
+    </div>
+    <div class="stat">
+      <div class="lab">Delivery</div>
+      <div class="val">1.2<small>s median</small></div>
+      <div class="sub">producer → device</div>
+    </div>
+  </div>
+
+  <div class="layout">
+
+    <!-- stream -->
+    <div class="panel">
+      <div class="panel-h">
+        <h2>Inbox</h2>
+        <div class="meta">newest first · 24 today</div>
+      </div>
+
+      <div class="daymark"><span>Thursday · 05 Nov 2026</span><div class="rule"></div></div>
+
+      <ul class="feed">
+        <li class="item fresh">
+          <div class="time">12:41:08</div>
+          <div class="ico">
+            <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M3 6a5 5 0 0 1 10 0v4l1.5 2h-13L3 10z"/><path d="M6.5 13.5a1.6 1.6 0 0 0 3 0"/></svg>
+          </div>
+          <div>
+            <h3>Disk usage 91% on node-3</h3>
+            <p>Free space is below the 5 GB threshold. Prune old build artefacts or expand the volume before the next deploy.</p>
+            <div class="row-meta"><span>#alerts</span><span>·</span><span>webpush</span><span class="newtag">new</span></div>
+          </div>
+          <div class="kind">alert</div>
+        </li>
+
+        <li class="item">
+          <div class="time">12:07:44</div>
+          <div class="ico">
+            <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M2 8.5 6 12l8-8"/></svg>
+          </div>
+          <div>
+            <h3>Transaction approved — ₹5,000 debited</h3>
+            <p>UPI · merchant northwind-supply · reference 4471 9022 1188. No action needed.</p>
+            <div class="row-meta"><span>#billing</span><span>·</span><span>http</span></div>
+          </div>
+          <div class="kind">info</div>
+        </li>
+
+        <li class="item">
+          <div class="time">11:52:10</div>
+          <div class="ico">
+            <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M2 12V7M8 12V4M14 12V9"/></svg>
+          </div>
+          <div>
+            <h3>Deploy finished — api-gateway v2.4.1</h3>
+            <p>Rolled out to 4 instances in 3 m 40 s. Error rate flat at 0.02%.</p>
+            <div class="row-meta"><span>#general</span><span>·</span><span>http</span></div>
+          </div>
+          <div class="kind">info</div>
+        </li>
+
+        <li class="item">
+          <div class="time">10:15:33</div>
+          <div class="ico">
+            <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="8" cy="8" r="5.5"/><path d="M8 4.5V8l2.5 1.5"/></svg>
+          </div>
+          <div>
+            <h3>Nightly digest — 12 subscribers</h3>
+            <p>Broadcast completed: 12 of 12 delivered, 0 retried, median latency 41 ms.</p>
+            <div class="row-meta"><span>broadcast</span><span>·</span><span>webpush</span></div>
+          </div>
+          <div class="kind">digest</div>
+        </li>
+
+        <li class="item">
+          <div class="time">09:30:02</div>
+          <div class="ico">
+            <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M2.5 4.5h11v8h-11z"/><path d="M2.5 5 8 9l5.5-4"/></svg>
+          </div>
+          <div>
+            <h3>Invoice #INV-2291 paid</h3>
+            <p>Settled by bank transfer. A receipt is attached to the billing account.</p>
+            <div class="row-meta"><span>#billing</span><span>·</span><span>http</span></div>
+          </div>
+          <div class="kind">info</div>
+        </li>
+
+        <li class="item">
+          <div class="time">08:02:19</div>
+          <div class="ico">
+            <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M8 2.5 14 13H2z"/><path d="M8 6.5v3"/><path d="M8 11.4v.1"/></svg>
+          </div>
+          <div>
+            <h3>Pager test — acknowledge to clear</h3>
+            <p>Attempt 1 of 5 reached the gateway. Delivered to this device by HTTP fallback.</p>
+            <div class="row-meta"><span>#alerts</span><span>·</span><span>http</span></div>
+          </div>
+          <div class="kind">alert</div>
+        </li>
+      </ul>
+
+      <div class="feed-foot">
+        <span>GET /events · one connection, no polling</span>
+        <span>6 of 24 shown</span>
+      </div>
+    </div>
+
+    <!-- aside -->
+    <div class="aside">
+
+      <div class="panel">
+        <div class="panel-h"><h2>Connection</h2><span class="chip ok live"><i></i>live</span></div>
+        <div class="panel-b">
+          <div class="kv"><span>Stream</span><b>/events</b></div>
+          <div class="kv"><span>Heartbeat</span><b>30 s</b></div>
+          <div class="kv"><span>Last event</span><b>12 s ago</b></div>
+          <div class="kv"><span>Reconnects</span><b>0</b></div>
+          <div class="kv"><span>Round trip</span><b>2 ms</b></div>
+          <div class="kv"><span>Uptime</span><b>6 h 12 m</b></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-h"><h2>Device</h2><span class="meta">registered</span></div>
+        <div class="panel-b">
+          <div class="kv"><span>ID</span><b>8f3a4c21</b></div>
+          <div class="kv"><span>Address</span><b>127.0.0.1:5001</b></div>
+          <div class="kv"><span>Type</span><b>web</b></div>
+          <div class="kv"><span>Channel</span><b>#alerts</b></div>
+          <div class="kv"><span>Registered</span><b>28 Oct 2026</b></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-h"><h2>Web push</h2><span class="chip ok"><i></i>active</span></div>
+        <div class="panel-b">
+          <div class="kv"><span>VAPID key</span><b class="ok">verified</b></div>
+          <div class="keybox">BFx4Rk2pQ9tLm3vZ7cYbN0sHd1JgXu6WaE8oPrTn4IkV</div>
+          <div class="hint" style="margin-top:10px">Delivered through /sw.js even when this tab is closed.</div>
+          <button class="btn sm" style="margin-top:11px">Send test notification</button>
+        </div>
+      </div>
+
+      <div class="stamp">
+        <span>mockup · direction 01</span>
+        <span>demo data</span>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+</body>
+</html>
